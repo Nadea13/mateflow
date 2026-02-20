@@ -28,7 +28,7 @@ export default async function LoginPage({
                     </svg>
                     <h1 className="mt-6 text-3xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'Outfit', sans-serif" }}>
                         <span className="text-slate-700 dark:text-slate-300">Mate</span>
-                        <span className="bg-gradient-to-r from-teal-600 to-indigo-600 bg-clip-text text-transparent">Flow</span>
+                        <span className="text-primary">Flow</span>
                     </h1>
                     <p className="mt-2 text-sm text-muted-foreground">
                         Friendly as a chat app, Professional as an accountant.
@@ -92,12 +92,8 @@ export default async function LoginPage({
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-4">
                             <GoogleAuthButton />
-                            <Button variant="outline" className="h-11 rounded-lg">
-                                <span className="mr-2 text-green-500 font-bold">LINE</span>
-                                Line
-                            </Button>
                         </div>
                     </CardContent>
                     <CardFooter className="justify-center">
