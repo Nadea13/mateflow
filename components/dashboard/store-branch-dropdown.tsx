@@ -6,10 +6,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, Sparkles, UserPlus, KeyRound, Shield, ShieldCheck, MapPin, ChevronRight, User } from "lucide-react";
+import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { switchActiveStore } from "@/lib/actions/profile";
-import { joinStoreWithCode } from "@/app/actions/team";
 import { toast } from "sonner";
 import { CreateStoreDialog } from "@/components/store/create-store-dialog";
 import { LocationDialog } from "@/components/inventory/location-dialog";
@@ -35,9 +34,6 @@ export function StoreBranchDropdown({
     const [createStoreOpen, setCreateStoreOpen] = useState(false);
     const [createLocationOpen, setCreateLocationOpen] = useState(false);
     const [switchStoreOpen, setSwitchStoreOpen] = useState(false);
-    const [joinStoreOpen, setJoinStoreOpen] = useState(false);
-    const [joinCode, setJoinCode] = useState("");
-    const [joining, setJoining] = useState(false);
     const [switchingStoreId, setSwitchingStoreId] = useState<string | null>(null);
 
     const hasStore = stores.length > 0;
@@ -60,17 +56,6 @@ export function StoreBranchDropdown({
     const activeBranch = accessibleLocations.find((l) => l.id === selectedBranchId);
     const branchLabel = activeBranch ? activeBranch.name : (accessibleLocations.length > 0 ? accessibleLocations[0]?.name : "สาขาหลัก");
 
-    // Format Role Thai Label
-    const roleLabels: Record<string, { label: string; color: string; iconBg: string }> = {
-        owner: { label: "เจ้าของร้าน", color: "bg-primary/10 text-primary border-primary/20", iconBg: "bg-primary/10 text-primary" },
-        admin: { label: "ผู้จัดการสาขา", color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20", iconBg: "bg-indigo-500/10 text-indigo-600" },
-        accountant: { label: "ฝ่ายบัญชี", color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", iconBg: "bg-emerald-500/10 text-emerald-600" },
-        stock_keeper: { label: "ผู้ดูแลคลัง", color: "bg-amber-500/10 text-amber-600 border-amber-500/20", iconBg: "bg-amber-500/10 text-amber-600" },
-        sales: { label: "พนักงานขาย", color: "bg-sky-500/10 text-sky-600 border-sky-500/20", iconBg: "bg-sky-500/10 text-sky-600" },
-    };
-
-    const currentRoleBadge = roleLabels[effectiveRole] || { label: effectiveRole, color: "bg-muted text-muted-foreground border-border", iconBg: "bg-muted text-muted-foreground" };
-
     const handleSelectStore = async (store: any) => {
         setSwitchingStoreId(store.id);
         try {
@@ -87,34 +72,6 @@ export function StoreBranchDropdown({
             toast.error(err?.message || "Error switching store");
         } finally {
             setSwitchingStoreId(null);
-        }
-    };
-
-    const handleJoinSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!joinCode.trim()) {
-            toast.error("กรุณากรอกรหัสร้านค้า (Store Code)");
-            return;
-        }
-
-        setJoining(true);
-        try {
-            const formData = new FormData();
-            formData.append("storeCode", joinCode.trim().toUpperCase());
-            const res = await joinStoreWithCode(formData);
-
-            if (res?.success) {
-                toast.success("เข้าร่วมทีมร้านค้าสำเร็จแล้ว!");
-                setJoinStoreOpen(false);
-                setJoinCode("");
-                window.location.reload();
-            } else {
-                toast.error(res?.error || "รหัสไม่ถูกต้อง หรือหมดอายุ");
-            }
-        } catch (err: any) {
-            toast.error(err?.message || "เกิดข้อผิดพลาดในการเข้าร่วมร้าน");
-        } finally {
-            setJoining(false);
         }
     };
 
@@ -275,7 +232,7 @@ export function StoreBranchDropdown({
                     </div>
 
                     {/* Bottom Action Footer */}
-                    <div className="border-t border-border/60 pt-2 grid grid-cols-2 gap-1.5">
+                    <div className="border-t border-border/60 pt-2">
                         <Button
                             variant="ghost"
                             size="sm"
@@ -283,22 +240,10 @@ export function StoreBranchDropdown({
                                 setOpen(false);
                                 setCreateStoreOpen(true);
                             }}
-                            className="h-8 text-[11px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary justify-start px-2 gap-1.5 cursor-pointer"
+                            className="w-full h-8 text-xs font-semibold text-foreground hover:bg-primary/10 hover:text-primary justify-center px-2 gap-1.5 cursor-pointer"
                         >
                             <Plus className="h-3.5 w-3.5 text-primary" />
                             + เพิ่มร้านใหม่
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                                setOpen(false);
-                                setJoinStoreOpen(true);
-                            }}
-                            className="h-8 text-[11px] font-semibold text-foreground hover:bg-indigo-500/10 hover:text-indigo-600 justify-start px-2 gap-1.5 cursor-pointer"
-                        >
-                            <KeyRound className="h-3.5 w-3.5 text-indigo-500" />
-                            เข้าร่วมด้วยรหัส
                         </Button>
                     </div>
                 </PopoverContent>
@@ -329,7 +274,7 @@ export function StoreBranchDropdown({
                                     สลับร้านค้าที่กำลังทำงาน
                                 </DialogTitle>
                                 <DialogDescription className="text-xs text-muted-foreground">
-                                    เลือกร้านค้าที่คุณเป็นเจ้าของหรือได้รับสิทธิ์เป็นทีมงาน
+                                    เลือกร้านค้าที่คุณต้องการทำงาน
                                 </DialogDescription>
                             </div>
                         </div>
@@ -406,67 +351,6 @@ export function StoreBranchDropdown({
                             + เพิ่มร้านค้าใหม่อีกร้าน
                         </Button>
                     </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            {/* Dialog 4: Join Store with Code Modal */}
-            <Dialog open={joinStoreOpen} onOpenChange={setJoinStoreOpen}>
-                <DialogContent className="sm:max-w-[400px]">
-                    <form onSubmit={handleJoinSubmit}>
-                        <DialogHeader>
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600">
-                                    <KeyRound className="h-5 w-5" />
-                                </div>
-                                <div>
-                                    <DialogTitle className="text-base font-semibold">
-                                        เข้าร่วมทีมร้านค้า
-                                    </DialogTitle>
-                                    <DialogDescription className="text-xs text-muted-foreground">
-                                        กรอกรหัส 6 หลักที่ได้รับจากเจ้าของร้านเพื่อเข้าทำงาน
-                                    </DialogDescription>
-                                </div>
-                            </div>
-                        </DialogHeader>
-
-                        <div className="space-y-3 py-4">
-                            <div className="space-y-1.5">
-                                <Label htmlFor="join-code" className="text-xs font-semibold">
-                                    รหัสร้านค้า (Store Code) *
-                                </Label>
-                                <Input
-                                    id="join-code"
-                                    value={joinCode}
-                                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                                    placeholder="เช่น MATE-8899"
-                                    maxLength={15}
-                                    className="h-10 text-center text-sm font-mono tracking-widest uppercase font-bold"
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <DialogFooter>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setJoinStoreOpen(false)}
-                                className="h-8 text-xs cursor-pointer"
-                            >
-                                ยกเลิก
-                            </Button>
-                            <Button
-                                type="submit"
-                                size="sm"
-                                disabled={joining}
-                                className="h-8 text-xs font-semibold gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
-                            >
-                                {joining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
-                                เข้าร่วมร้านค้า
-                            </Button>
-                        </DialogFooter>
-                    </form>
                 </DialogContent>
             </Dialog>
         </>
