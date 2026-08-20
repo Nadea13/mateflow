@@ -1,6 +1,7 @@
-import { getBills } from "@/lib/actions/bills";
+﻿import { getBills } from "@/lib/actions/bills";
 import { getCustomers } from "@/lib/actions/customers";
 import { getProducts } from "@/lib/actions/products";
+import { getStoreProfile } from "@/lib/actions/profile";
 import { BillTable } from "@/components/bills/bill-table";
 import { CreateBillDialog } from "@/components/bills/create-bill-dialog";
 import { ImportDialog } from "@/components/shared/import-dialog";
@@ -8,10 +9,11 @@ import { importBills } from "@/lib/actions/import";
 import { PageHeader } from "@/components/shared/page-header";
 
 export default async function BillsPage() {
-    const [bills, customers, products] = await Promise.all([
+    const [bills, customers, products, storeProfile] = await Promise.all([
         getBills(),
         getCustomers(),
         getProducts(),
+        getStoreProfile(),
     ]);
 
     return (
@@ -22,8 +24,7 @@ export default async function BillsPage() {
                     <CreateBillDialog customers={customers} products={products} />
                 </div>
             </PageHeader>
-            <BillTable bills={bills} />
+            <BillTable bills={bills} storeProfile={storeProfile} />
         </div>
     );
 }
-

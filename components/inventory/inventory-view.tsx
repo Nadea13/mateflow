@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { MapPin, Package, Plus, ArrowRightLeft } from "lucide-react";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Location, Product, InventoryLevel } from "@/types";
 import { LocationTable } from "./location-table";
 import { InventoryTransferTable } from "./inventory-transfer-table";
+import { StockTransferDialog } from "./stock-transfer-dialog";
 import { useTranslation } from "@/lib/i18n/provider";
 
 interface InventoryViewProps {
@@ -30,9 +31,13 @@ export function InventoryView({ locations, products, inventoryLevels }: Inventor
                         </TabsTrigger>
                         <TabsTrigger value="stock">
                             <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
-                            Stock Allocation
+                            Stock Allocation & Movements
                         </TabsTrigger>
                     </TabsList>
+
+                    <div className="flex items-center gap-2">
+                        <StockTransferDialog branches={locations} products={products} />
+                    </div>
                 </div>
 
                 <TabsContent value="locations" className="space-y-6">
