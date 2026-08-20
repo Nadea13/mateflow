@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LocationDialog } from "@/components/inventory/location-dialog";
+import { CreateStoreDialog } from "@/components/store/create-store-dialog";
 import { Location } from "@/types";
 import Link from "next/link";
 
@@ -20,24 +21,31 @@ export function StoreBranchDropdown({
 }: StoreBranchDropdownProps) {
     const [open, setOpen] = useState(false);
     const [addBranchOpen, setAddBranchOpen] = useState(false);
+    const [createStoreOpen, setCreateStoreOpen] = useState(false);
     const [selectedBranchId, setSelectedBranchId] = useState<string>(locations[0]?.id || "main");
 
     const hasStore = !!storeName && storeName.trim().length > 0;
     const activeBranch = locations.find((l) => l.id === selectedBranchId);
     const branchLabel = activeBranch ? activeBranch.name : "สาขาหลัก (Headquarters)";
 
-    // IF NO STORE YET: Render prominent "+ Create Store" Button
+    // IF NO STORE YET: Render Clean Single "+" Button that triggers Dialog
     if (!hasStore) {
         return (
-            <Link href="/dashboard/store">
+            <>
                 <Button
                     size="sm"
-                    className="w-full h-9 text-xs font-semibold gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground shadow-xs rounded-lg justify-start px-2.5 cursor-pointer"
+                    onClick={() => setCreateStoreOpen(true)}
+                    className="w-full h-9 text-xs font-semibold gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs rounded-lg justify-start px-3 cursor-pointer"
                 >
-                    <PlusCircle className="h-4 w-4 shrink-0" />
-                    <span className="truncate">+ สร้างร้านค้าของคุณ</span>
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span className="truncate">สร้างร้านค้าของคุณ</span>
                 </Button>
-            </Link>
+
+                <CreateStoreDialog
+                    open={createStoreOpen}
+                    setOpen={setCreateStoreOpen}
+                />
+            </>
         );
     }
 
