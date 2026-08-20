@@ -69,20 +69,23 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
     );
     const hasVat = !!vatAdjustment;
     const isVatInclusive = vatAdjustment?.label?.includes("รวมในราคา") || vatAdjustment?.value === 0;
-    const isVatExclusive = vatAdjustment?.label?.includes("คิดแยก") || (hasVat && !isVatInclusive && vatAdjustment.value > 0);
 
-    // Calculate Subtotal Before Tax & VAT Amount
+    // Correct VAT Calculation:
+    // 1. If Exclusive (+7%): Base = rawItemsTotal (30,000) -> VAT = 2,100 -> Total = 32,100
+    // 2. If Inclusive (7% in price): Total = 30,000 -> Base = 30,000 * 100 / 107 (28,037.38) -> VAT = 1,962.62
     let subtotalBeforeTax = rawItemsTotal;
     let computedVatAmount = 0;
 
-    if (isVatInclusive) {
-        // Price includes 7% VAT -> extract base: (Total * 100) / 107
-        subtotalBeforeTax = (rawItemsTotal * 100) / 107;
-        computedVatAmount = rawItemsTotal - subtotalBeforeTax;
-    } else if (isVatExclusive) {
-        // Price excludes VAT -> base is raw total, vat is adjustment value or 7%
-        subtotalBeforeTax = rawItemsTotal;
-        computedVatAmount = Number(vatAdjustment?.value) || ((rawItemsTotal * 7) / 100);
+    if (hasVat) {
+        if (isVatInclusive) {
+            subtotalBeforeTax = (rawItemsTotal * 100) / 107;
+            computedVatAmount = rawItemsTotal - subtotalBeforeTax;
+        } else {
+            // Exclusive: If the adjustment value stored in DB is accidentally the rate (7), recalculate accurately:
+            const rawVatVal = Number(vatAdjustment.value);
+            computedVatAmount = rawVatVal > 100 ? rawVatVal : (rawItemsTotal * 7) / 100;
+            subtotalBeforeTax = rawItemsTotal;
+        }
     }
 
     // Dynamic Title & Status Logic
