@@ -53,10 +53,37 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
 
     const billNumber = `INV-${bill.id.slice(0, 8).toUpperCase()}`;
 
-    // Determine if VAT / Tax was included in adjustments
-    const hasVat = bill.adjustments && bill.adjustments.some(
+    // Filter out internal system metadata tags from adjustments
+    const visibleAdjustments = (bill.adjustments || []).filter(
+        (adj) => adj.label && !adj.label.startsWith("__")
+    );
+
+    // Calculate subtotal from line items (or fallback to bill.total_amount)
+    const rawItemsTotal = bill.items && bill.items.length > 0
+        ? bill.items.reduce((sum, item) => sum + (Number(item.total_price) || (Number(item.quantity) * Number(item.unit_price))), 0)
+        : Number(bill.total_amount);
+
+    // Check VAT presence
+    const vatAdjustment = visibleAdjustments.find(
         (adj) => adj.label?.toLowerCase().includes("vat") || adj.label?.toLowerCase().includes("tax") || adj.label?.includes("ภาษี")
     );
+    const hasVat = !!vatAdjustment;
+    const isVatInclusive = vatAdjustment?.label?.includes("รวมในราคา") || vatAdjustment?.value === 0;
+    const isVatExclusive = vatAdjustment?.label?.includes("คิดแยก") || (hasVat && !isVatInclusive && vatAdjustment.value > 0);
+
+    // Calculate Subtotal Before Tax & VAT Amount
+    let subtotalBeforeTax = rawItemsTotal;
+    let computedVatAmount = 0;
+
+    if (isVatInclusive) {
+        // Price includes 7% VAT -> extract base: (Total * 100) / 107
+        subtotalBeforeTax = (rawItemsTotal * 100) / 107;
+        computedVatAmount = rawItemsTotal - subtotalBeforeTax;
+    } else if (isVatExclusive) {
+        // Price excludes VAT -> base is raw total, vat is adjustment value or 7%
+        subtotalBeforeTax = rawItemsTotal;
+        computedVatAmount = Number(vatAdjustment?.value) || ((rawItemsTotal * 7) / 100);
+    }
 
     // Dynamic Title & Status Logic
     let documentTitleThai = "ใบแจ้งหนี้";
@@ -308,7 +335,7 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                     ) : null}
 
                                     {bill.note && (
-                                        <div className="text-[11px] text-muted-foreground">
+                                        <div className="text-[11px] text-muted-foreground whitespace-pre-line">
                                             <span className="font-semibold text-foreground">หมายเหตุ:</span> {bill.note}
                                         </div>
                                     )}
@@ -316,21 +343,40 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
 
                                 {/* Right Side: Financial Calculation & Authorized Signature */}
                                 <div className="space-y-4">
-                                    <div className="space-y-1.5 text-xs">
-                                        {/* Adjustments / Taxes Breakdown */}
-                                        {bill.adjustments && bill.adjustments.map((adj, idx) => (
-                                            <div key={idx} className="flex justify-between py-0.5 text-muted-foreground">
-                                                <span>{adj.label}</span>
-                                                <span className="font-mono">
-                                                    {adj.type === "percent" ? `${adj.value}%` : `฿${adj.value}`}
-                                                </span>
-                                            </div>
-                                        ))}
+                                    <div className="space-y-1.5 text-xs font-mono">
+                                        {/* 1. มูลค่าสินค้าก่อนภาษี (Subtotal before Tax) */}
+                                        <div className="flex justify-between py-0.5 text-muted-foreground">
+                                            <span>มูลค่าก่อนเสียภาษี:</span>
+                                            <span>฿{subtotalBeforeTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        </div>
 
-                                        <div className="flex justify-between py-1 border-t border-b border-border/60">
-                                            <span className="font-semibold text-foreground">ยอดรวมสุทธิ (Total Amount)</span>
+                                        {/* 2. ภาษีมูลค่าเพิ่ม (VAT 7%) */}
+                                        {hasVat && (
+                                            <div className="flex justify-between py-0.5 text-muted-foreground">
+                                                <span>
+                                                    ภาษีมูลค่าเพิ่ม (VAT 7%){isVatInclusive ? " [รวมในราคา]" : ""}:
+                                                </span>
+                                                <span>฿{computedVatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            </div>
+                                        )}
+
+                                        {/* 3. ส่วนลดหรือค่าบริการเพิ่มเติม และ หัก ณ ที่จ่าย */}
+                                        {visibleAdjustments
+                                            .filter((adj) => !adj.label?.toLowerCase().includes("vat") && !adj.label?.toLowerCase().includes("ภาษีมูลค่าเพิ่ม"))
+                                            .map((adj, idx) => (
+                                                <div key={idx} className={`flex justify-between py-0.5 ${adj.value < 0 ? "text-amber-600 font-semibold" : "text-muted-foreground"}`}>
+                                                    <span>{adj.label}</span>
+                                                    <span>
+                                                        {adj.type === "percent" ? `${adj.value}%` : `฿${Math.abs(adj.value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                                    </span>
+                                                </div>
+                                            ))}
+
+                                        {/* 4. ยอดรวมสุทธิ (Grand Total) */}
+                                        <div className="flex justify-between py-1.5 border-t border-b border-border/80 font-sans">
+                                            <span className="font-bold text-foreground">ยอดรวมสุทธิ (Total Amount)</span>
                                             <span className="font-bold font-mono text-base text-primary">
-                                                ฿{Number(bill.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                ฿{Number(bill.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </span>
                                         </div>
                                     </div>
@@ -409,9 +455,19 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                 )}
                             </div>
 
-                            {/* Total Amount */}
-                            <div className="py-2 space-y-1 border-b border-dashed border-neutral-400">
-                                <div className="flex justify-between text-sm font-bold">
+                            {/* Slip Breakdown */}
+                            <div className="py-2 space-y-1 border-b border-dashed border-neutral-400 text-[10px]">
+                                <div className="flex justify-between text-neutral-600">
+                                    <span>มูลค่าก่อนภาษี:</span>
+                                    <span>฿{subtotalBeforeTax.toFixed(2)}</span>
+                                </div>
+                                {hasVat && (
+                                    <div className="flex justify-between text-neutral-600">
+                                        <span>ภาษี VAT 7%:</span>
+                                        <span>฿{computedVatAmount.toFixed(2)}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between text-sm font-bold pt-1 border-t border-dashed border-neutral-300">
                                     <span>TOTAL</span>
                                     <span>฿{Number(bill.total_amount).toFixed(2)}</span>
                                 </div>
