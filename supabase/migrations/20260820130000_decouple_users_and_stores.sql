@@ -1,24 +1,52 @@
 ﻿-- Migration: Full sync of all fields from auth.users to public.users & Decouple stores
--- Description: Creates public.users capturing all metadata, phone, email, and provider details from auth.users
+-- Description: Creates / alters public.users ensuring all columns exist before syncing from auth.users
 
 DO $$
 BEGIN
-    -- 1. Create public.users table with comprehensive auth columns
+    -- 1. Create public.users table if not exists
     CREATE TABLE IF NOT EXISTS public.users (
         id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
         email text UNIQUE NOT NULL,
-        phone text,
-        full_name text,
-        avatar_url text,
-        provider text DEFAULT 'email',
-        raw_user_meta_data jsonb,
-        raw_app_meta_data jsonb,
-        email_confirmed_at timestamptz,
-        phone_confirmed_at timestamptz,
-        last_sign_in_at timestamptz,
         created_at timestamptz DEFAULT now(),
         updated_at timestamptz DEFAULT now()
     );
+
+    -- 1.1 Ensure all comprehensive columns exist on public.users (in case users table already existed before)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'phone') THEN
+        ALTER TABLE public.users ADD COLUMN phone text;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'full_name') THEN
+        ALTER TABLE public.users ADD COLUMN full_name text;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'avatar_url') THEN
+        ALTER TABLE public.users ADD COLUMN avatar_url text;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'provider') THEN
+        ALTER TABLE public.users ADD COLUMN provider text DEFAULT 'email';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'raw_user_meta_data') THEN
+        ALTER TABLE public.users ADD COLUMN raw_user_meta_data jsonb;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'raw_app_meta_data') THEN
+        ALTER TABLE public.users ADD COLUMN raw_app_meta_data jsonb;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email_confirmed_at') THEN
+        ALTER TABLE public.users ADD COLUMN email_confirmed_at timestamptz;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'phone_confirmed_at') THEN
+        ALTER TABLE public.users ADD COLUMN phone_confirmed_at timestamptz;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'last_sign_in_at') THEN
+        ALTER TABLE public.users ADD COLUMN last_sign_in_at timestamptz;
+    END IF;
 
     -- Enable RLS on users
     ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
