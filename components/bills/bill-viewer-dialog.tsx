@@ -53,6 +53,31 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
 
     const billNumber = `INV-${bill.id.slice(0, 8).toUpperCase()}`;
 
+    // Determine if VAT / Tax was included in adjustments or store settings
+    const hasVat = bill.adjustments && bill.adjustments.some(
+        (adj) => adj.label?.toLowerCase().includes("vat") || adj.label?.toLowerCase().includes("tax") || adj.label?.includes("ภาษี")
+    );
+
+    // Dynamic Title Logic based on status & VAT
+    let documentTitleThai = "ใบแจ้งหนี้";
+    let documentTitleEn = "INVOICE";
+
+    if (bill.status === "draft") {
+        documentTitleThai = "ใบแจ้งหนี้";
+        documentTitleEn = "INVOICE (DRAFT)";
+    } else if (bill.status === "paid") {
+        if (hasVat) {
+            documentTitleThai = "ใบเสร็จรับเงิน / ใบกำกับภาษี";
+            documentTitleEn = "RECEIPT / TAX INVOICE";
+        } else {
+            documentTitleThai = "ใบเสร็จรับเงิน";
+            documentTitleEn = "RECEIPT";
+        }
+    } else if (bill.status === "cancelled") {
+        documentTitleThai = "ใบแจ้งหนี้ (ยกเลิก)";
+        documentTitleEn = "VOID INVOICE";
+    }
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 print:p-0 print:max-w-none print:shadow-none print:border-none">
@@ -64,10 +89,10 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                         </div>
                         <div>
                             <DialogTitle className="text-base font-semibold">
-                                เอกสารบิล / ใบเสร็จรับเงิน
+                                {documentTitleThai}
                             </DialogTitle>
                             <DialogDescription className="text-xs text-muted-foreground">
-                                รหัสเอกสาร: {billNumber}
+                                รหัสเอกสาร: {billNumber} • สถานะ: <span className="uppercase font-semibold text-foreground">{bill.status}</span>
                             </DialogDescription>
                         </div>
                     </div>
@@ -99,22 +124,22 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                         <Button
                             size="sm"
                             onClick={handlePrint}
-                            className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer shadow-xs"
+                            className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground shadow-xs cursor-pointer"
                         >
                             <Printer className="h-3.5 w-3.5" />
-                            พิมพ์เอกสาร (Print)
+                            พิมพ์เอกสาร (Print / PDF)
                         </Button>
                     </div>
                 </div>
 
-                {/* Printable Document Area */}
-                <div ref={printAreaRef} className="mt-4 flex justify-center bg-muted/20 p-2 sm:p-6 rounded-xl print:p-0 print:m-0 print:bg-white">
+                {/* Printable Document Canvas */}
+                <div ref={printAreaRef} className="flex justify-center p-2 sm:p-4 bg-muted/20 rounded-xl">
                     {template === "a4" ? (
-                        /* ================= A4 FULL TAX INVOICE & RECEIPT ================= */
-                        <div className="w-full max-w-[760px] bg-card text-card-foreground p-8 rounded-xl border border-border/80 shadow-sm print:shadow-none print:border-none print:w-full print:p-6">
+                        /* ================= A4 TAX INVOICE / RECEIPT TEMPLATE ================= */
+                        <div className="w-full max-w-[760px] bg-card text-card-foreground p-8 rounded-xl shadow-xs border border-border print:border-none print:shadow-none print:p-0 print:w-full">
                             {/* Header: Store Info & Document Title */}
-                            <div className="flex justify-between items-start pb-6 border-b border-border/80">
-                                <div className="space-y-1 max-w-[60%]">
+                            <div className="flex justify-between items-start border-b border-border pb-6">
+                                <div className="space-y-1.5 max-w-[420px]">
                                     {storeProfile?.avatar_url ? (
                                         <img
                                             src={storeProfile.avatar_url}
@@ -135,13 +160,14 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                 </div>
 
                                 <div className="text-right space-y-2">
-                                    <div className="inline-block px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-md font-bold text-sm">
-                                        ใบเสร็จรับเงิน / ใบกำกับภาษี
+                                    <div className="inline-block px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg font-bold text-sm">
+                                        {documentTitleThai}
                                     </div>
-                                    <div className="text-xs space-y-1 font-mono">
+                                    <p className="text-[10px] font-mono tracking-wider text-muted-foreground uppercase">{documentTitleEn}</p>
+                                    <div className="text-xs space-y-1 font-mono pt-1">
                                         <p><span className="text-muted-foreground">เลขที่:</span> <span className="font-bold text-foreground">{billNumber}</span></p>
                                         <p><span className="text-muted-foreground">วันที่:</span> {billDate}</p>
-                                        <p><span className="text-muted-foreground">สถานะ:</span> <span className="uppercase font-semibold">{bill.status}</span></p>
+                                        <p><span className="text-muted-foreground">สถานะ:</span> <span className={`uppercase font-semibold ${bill.status === "paid" ? "text-emerald-600" : "text-amber-600"}`}>{bill.status}</span></p>
                                     </div>
                                 </div>
                             </div>
@@ -154,7 +180,9 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                 </div>
                                 <div className="text-right">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">เงื่อนไขการชำระเงิน</span>
-                                    <p className="font-medium text-foreground mt-0.5">ชำระเงินทันที / PromptPay</p>
+                                    <p className="font-medium text-foreground mt-0.5">
+                                        {bill.status === "paid" ? "ชำระเงินเรียบร้อยแล้ว (Paid)" : "รอการชำระเงิน (Pending)"}
+                                    </p>
                                 </div>
                             </div>
 
@@ -201,7 +229,7 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                             <div className="pt-4 border-t border-border/80 grid grid-cols-1 sm:grid-cols-2 gap-6">
                                 {/* Left Side: PromptPay QR Code & Notes */}
                                 <div className="space-y-3">
-                                    {qrCodeDataUrl ? (
+                                    {qrCodeDataUrl && bill.status !== "paid" ? (
                                         <div className="inline-flex items-center gap-3 p-2.5 rounded-xl border border-border/80 bg-muted/30">
                                             <img src={qrCodeDataUrl} alt="PromptPay QR" className="w-20 h-20 rounded-md border border-border" />
                                             <div className="space-y-0.5 text-[10px]">
@@ -212,6 +240,11 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                                 <p className="text-muted-foreground">บัญชี: {storeProfile?.tax_id || storeProfile?.store_phone || "ร้านค้า"}</p>
                                                 <p className="font-mono font-bold text-primary">฿{Number(bill.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                                             </div>
+                                        </div>
+                                    ) : bill.status === "paid" ? (
+                                        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold">
+                                            <CheckCircle className="h-4 w-4" />
+                                            ชำระเงินครบถ้วนแล้ว (PAID)
                                         </div>
                                     ) : null}
 
@@ -225,8 +258,18 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                 {/* Right Side: Financial Calculation & Authorized Signature */}
                                 <div className="space-y-4">
                                     <div className="space-y-1.5 text-xs">
-                                        <div className="flex justify-between py-1 border-b border-border/60">
-                                            <span className="text-muted-foreground">ยอดรวมสุทธิ (Total Amount)</span>
+                                        {/* Adjustments / Taxes Breakdown */}
+                                        {bill.adjustments && bill.adjustments.map((adj, idx) => (
+                                            <div key={idx} className="flex justify-between py-0.5 text-muted-foreground">
+                                                <span>{adj.label}</span>
+                                                <span className="font-mono">
+                                                    {adj.type === "percent" ? `${adj.value}%` : `฿${adj.value}`}
+                                                </span>
+                                            </div>
+                                        ))}
+
+                                        <div className="flex justify-between py-1 border-t border-b border-border/60">
+                                            <span className="font-semibold text-foreground">ยอดรวมสุทธิ (Total Amount)</span>
                                             <span className="font-bold font-mono text-base text-primary">
                                                 ฿{Number(bill.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                             </span>
@@ -262,6 +305,11 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                 <p className="text-[10px] text-neutral-600 leading-tight">{storeProfile?.store_address || ""}</p>
                                 {storeProfile?.tax_id && <p className="text-[10px] text-neutral-600">TAX ID: {storeProfile.tax_id}</p>}
                                 {storeProfile?.store_phone && <p className="text-[10px] text-neutral-600">TEL: {storeProfile.store_phone}</p>}
+                                <div className="pt-1">
+                                    <span className="font-bold text-xs uppercase px-2 py-0.5 border border-black rounded inline-block">
+                                        {documentTitleThai}
+                                    </span>
+                                </div>
                             </div>
 
                             <div className="py-2 text-[10px] space-y-0.5 border-b border-dashed border-neutral-400">
@@ -271,7 +319,7 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                 </div>
                                 <div className="flex justify-between">
                                     <span>CUST: {bill.customer_name || "GUEST"}</span>
-                                    <span className="uppercase">{bill.status}</span>
+                                    <span className="uppercase font-bold">{bill.status}</span>
                                 </div>
                             </div>
 
@@ -301,7 +349,7 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                             </div>
 
                             {/* QR Code on Slip */}
-                            {qrCodeDataUrl && (
+                            {qrCodeDataUrl && bill.status !== "paid" && (
                                 <div className="pt-3 text-center space-y-1 flex flex-col items-center">
                                     <img src={qrCodeDataUrl} alt="" className="w-24 h-24" />
                                     <span className="text-[9px] text-neutral-500">Scan PromptPay to Pay</span>
