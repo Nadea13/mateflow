@@ -1,10 +1,9 @@
 ﻿"use client";
 
 import { useState } from "react";
-import { Store, Building2, ChevronDown, Plus, Check, MapPin, Sparkles, PlusCircle } from "lucide-react";
+import { Store, Building2, ChevronDown, Plus, Check, PlusCircle, Settings, StoreIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { LocationDialog } from "@/components/inventory/location-dialog";
 import { CreateStoreDialog } from "@/components/store/create-store-dialog";
 import { Location } from "@/types";
@@ -74,8 +73,8 @@ export function StoreBranchDropdown({
                     </button>
                 </PopoverTrigger>
 
-                <PopoverContent align="start" side="bottom" className="w-72 p-2 shadow-2xl border-border bg-popover/95 backdrop-blur-xl rounded-xl space-y-2 z-50">
-                    {/* Store Header Item */}
+                <PopoverContent align="start" side="bottom" className="w-72 p-2 shadow-2xl border-border bg-popover/95 backdrop-blur-xl rounded-xl space-y-2.5 z-50">
+                    {/* Active Store Header & Quick Actions */}
                     <div className="p-2.5 rounded-lg bg-muted/50 border border-border/60">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 min-w-0">
@@ -84,26 +83,27 @@ export function StoreBranchDropdown({
                                 </div>
                                 <div className="flex flex-col min-w-0">
                                     <span className="text-xs font-bold text-foreground truncate">{storeName}</span>
-                                    <span className="text-[10px] text-muted-foreground">ร้านค้าหลัก</span>
+                                    <span className="text-[10px] text-muted-foreground">ร้านค้าที่กำลังใช้งาน</span>
                                 </div>
                             </div>
                             <Link href="/dashboard/store" onClick={() => setOpen(false)}>
-                                <span className="text-[10px] text-primary hover:underline font-semibold cursor-pointer">
-                                    ตั้งค่าร้าน
+                                <span className="text-[10px] text-primary hover:underline font-semibold cursor-pointer flex items-center gap-0.5">
+                                    <Settings className="h-3 w-3" />
+                                    ตั้งค่า
                                 </span>
                             </Link>
                         </div>
                     </div>
 
                     {/* Branches List Header */}
-                    <div className="px-1 pt-1 flex items-center justify-between">
+                    <div className="px-1 flex items-center justify-between">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                             สาขาและคลัง ({locations.length > 0 ? locations.length : 1})
                         </span>
                     </div>
 
                     {/* Branches Selection List */}
-                    <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
+                    <div className="space-y-1 max-h-40 overflow-y-auto pr-0.5">
                         {/* Default / Primary Headquarters Branch */}
                         {locations.length === 0 ? (
                             <button
@@ -158,8 +158,8 @@ export function StoreBranchDropdown({
                         )}
                     </div>
 
-                    {/* Add Branch Button inside Dropdown */}
-                    <div className="pt-1 border-t border-border/60">
+                    {/* Bottom Actions: 1. Add Branch, 2. Add New Store */}
+                    <div className="pt-1.5 border-t border-border/60 space-y-1">
                         <Button
                             size="sm"
                             variant="ghost"
@@ -172,6 +172,19 @@ export function StoreBranchDropdown({
                             <Plus className="h-3.5 w-3.5" />
                             <span>+ เพิ่มสาขา / คลังสินค้าใหม่</span>
                         </Button>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                                setOpen(false);
+                                setCreateStoreOpen(true);
+                            }}
+                            className="w-full h-8 text-xs font-semibold justify-center gap-1.5 border-border hover:bg-muted/60 text-muted-foreground hover:text-foreground rounded-lg cursor-pointer"
+                        >
+                            <StoreIcon className="h-3.5 w-3.5" />
+                            <span>+ สร้าง / แก้ไขร้านค้าใหม่</span>
+                        </Button>
                     </div>
                 </PopoverContent>
             </Popover>
@@ -180,6 +193,12 @@ export function StoreBranchDropdown({
             <LocationDialog
                 open={addBranchOpen}
                 setOpen={setAddBranchOpen}
+            />
+
+            {/* Modal for adding / editing store */}
+            <CreateStoreDialog
+                open={createStoreOpen}
+                setOpen={setCreateStoreOpen}
             />
         </>
     );
