@@ -69,14 +69,22 @@ const sidebarItems = [
 ]
 
 interface SidebarProps {
-    userRole?: "owner" | "admin" | "sales";
+    userRole?: string;
+    assignedBranchId?: string | null;
     storeName?: string;
     activeStoreId?: string;
     stores?: any[];
     locations?: Location[];
 }
 
-export function Sidebar({ userRole = "owner", storeName, activeStoreId, stores = [], locations = [] }: SidebarProps) {
+export function Sidebar({ 
+    userRole = "owner", 
+    assignedBranchId,
+    storeName, 
+    activeStoreId, 
+    stores = [], 
+    locations = [] 
+}: SidebarProps) {
     const pathname = usePathname()
     const { t } = useTranslation()
 
@@ -88,11 +96,13 @@ export function Sidebar({ userRole = "owner", storeName, activeStoreId, stores =
                     <MateFlowLogo size={28} />
                 </div>
 
-                {/* Store & Branch Selector in Sidebar */}
+                {/* Store & Branch Selector in Sidebar with Role Badge */}
                 <div className="px-3 mb-4">
                     <StoreBranchDropdown
                         storeName={storeName}
                         activeStoreId={activeStoreId}
+                        userRole={userRole}
+                        assignedBranchId={assignedBranchId}
                         stores={stores}
                         locations={locations}
                     />
@@ -102,7 +112,7 @@ export function Sidebar({ userRole = "owner", storeName, activeStoreId, stores =
                 <div className="flex flex-col flex-grow px-2">
                     <nav className="space-y-0.5">
                         {sidebarItems.map((item) => {
-                            if (userRole === "sales") {
+                            if (userRole === "sales" || userRole === "stock_keeper") {
                                 if (
                                     item.href === "/dashboard/settings" ||
                                     item.href === "/dashboard/expenses" ||
@@ -136,25 +146,6 @@ export function Sidebar({ userRole = "owner", storeName, activeStoreId, stores =
                             )
                         })}
                     </nav>
-                </div>
-
-                {/* User / Workspace Footer */}
-                <div className="p-3 border-t border-border">
-                    <div className="flex items-center justify-between px-2 py-1.5 rounded-md bg-muted/40 text-xs">
-                        <div className="flex flex-col truncate">
-                            <span className="font-medium text-foreground truncate">
-                                {userRole === "owner" ? "Organization" : userRole === "admin" ? "Admin Access" : "Sales Team"}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground capitalize">{userRole}</span>
-                        </div>
-                        <Link
-                            href="/login"
-                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-background transition-colors cursor-pointer"
-                            title={t("nav.signOut")}
-                        >
-                            <LogOut className="h-3.5 w-3.5" />
-                        </Link>
-                    </div>
                 </div>
             </div>
         </aside>

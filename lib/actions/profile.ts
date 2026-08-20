@@ -14,7 +14,7 @@ export async function getUserProfile() {
 
     if (!user) return null;
 
-    // 1. Fetch user profile from public.users table (or stores fallback)
+    // 1. Fetch user profile from public.users table
     let { data: dbUser } = await supabase
         .from("users")
         .select("*")
@@ -33,6 +33,45 @@ export async function getUserProfile() {
 
     let { data: store } = await storeQuery.maybeSingle();
 
+    // 3. Check if user is an owner or employee in store_team_members
+    let userRole = "owner";
+    let assignedBranchId: string | null = null;
+
+    if (store) {
+        if (store.owner_id !== user.id) {
+            // User is employee in this store
+            const { data: member } = await supabase
+                .from("store_team_members")
+                .select("role, assigned_branch_id")
+                .eq("store_id", store.id)
+                .eq("user_id", user.id)
+                .maybeSingle();
+
+            if (member) {
+                userRole = member.role || "sales";
+                assignedBranchId = member.assigned_branch_id || null;
+            }
+        }
+    } else {
+        // Fallback check if user is invited employee to any store
+        const { data: membership } = await supabase
+            .from("store_team_members")
+            .select(`
+                role,
+                assigned_branch_id,
+                store:stores ( * )
+            `)
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: true })
+            .maybeSingle();
+
+        if (membership && membership.store) {
+            store = membership.store as any;
+            userRole = membership.role || "sales";
+            assignedBranchId = membership.assigned_branch_id || null;
+        }
+    }
+
     if (!store) {
         // Fallback query by id
         const storeFallback = await supabase
@@ -49,12 +88,13 @@ export async function getUserProfile() {
         store_name: store?.store_name || "",
         avatar_url: store?.avatar_url || dbUser?.avatar_url || "",
         owner_id: store?.owner_id || user.id,
-        role: store?.role || "owner",
+        role: userRole as any,
+        assigned_branch_id: assignedBranchId,
         default_currency: store?.default_currency || "THB",
         country: store?.country || "TH",
         tax_rate: store?.tax_rate || 7,
         updated_at: store?.updated_at || new Date().toISOString(),
-    } as Profile;
+    } as Profile & { assigned_branch_id?: string | null };
 }
 
 export async function getAuthProfile() {
@@ -99,13 +139,15 @@ export async function getStoreProfile(storeId?: string) {
     let { data: store } = await query.maybeSingle();
 
     if (!store) {
-        // Fallback by id
-        const fallback = await supabase
-            .from("stores")
-            .select("*")
-            .eq("id", user.id)
+        // Fallback by member membership
+        const { data: membership } = await supabase
+            .from("store_team_members")
+            .select("store:stores ( * )")
+            .eq("user_id", user.id)
             .maybeSingle();
-        store = fallback.data;
+        if (membership && membership.store) {
+            store = membership.store as any;
+        }
     }
 
     return {
@@ -117,7 +159,7 @@ export async function getStoreProfile(storeId?: string) {
         tax_id: store?.tax_id || "",
         signature_url: store?.signature_url || "",
         store_phone: store?.store_phone || "",
-        role: store?.role || "owner",
+        role: store?.owner_id === user.id ? "owner" : "sales",
         etax_enabled: store?.etax_enabled || false,
         etax_api_key: store?.etax_api_key || "",
         etax_company_id: store?.etax_company_id || "",
@@ -153,22 +195,38 @@ export async function getStores() {
 
     if (!user) return [];
 
-    const { data, error } = await supabase
+    // 1. Owned stores
+    const { data: ownedStores } = await supabase
         .from("stores")
         .select("*")
         .eq("owner_id", user.id)
         .order("created_at", { ascending: true });
 
-    if (error || !data || data.length === 0) {
-        // Fallback check by id
-        const fallback = await supabase
-            .from("stores")
-            .select("*")
-            .eq("id", user.id);
-        return fallback.data || [];
+    // 2. Member stores (where user is employee)
+    const { data: memberStores } = await supabase
+        .from("store_team_members")
+        .select(`
+            role,
+            assigned_branch_id,
+            store:stores ( * )
+        `)
+        .eq("user_id", user.id);
+
+    const allStores: any[] = [...(ownedStores || [])];
+
+    if (memberStores && memberStores.length > 0) {
+        for (const ms of memberStores) {
+            if (ms.store && !allStores.some(s => s.id === (ms.store as any).id)) {
+                allStores.push({
+                    ...(ms.store as any),
+                    user_role: ms.role,
+                    assigned_branch_id: ms.assigned_branch_id,
+                });
+            }
+        }
     }
 
-    return data;
+    return allStores;
 }
 
 export async function createNewStore(data: {
@@ -233,11 +291,10 @@ export async function createNewStore(data: {
         address: finalBranchAddress,
     };
 
-    // Try inserting into branchs table with store_id
     let branchRes = await supabase.from("branchs").insert(branchPayload);
 
     if (branchRes.error) {
-        console.warn("Retrying branch insertion into branchs with user_id/store_id fallback:", branchRes.error);
+        console.warn("Retrying branch insertion into branchs with fallback:", branchRes.error);
         await supabase.from("branchs").insert({
             ...branchPayload,
             user_id: user.id,
@@ -356,7 +413,6 @@ export async function getTeamMembers(storeId?: string) {
     const { data, error } = await query;
 
     if (error || !data) {
-        // Fallback check legacy team_members
         const fallback = await supabase.from("team_members").select("*");
         return fallback.data || [];
     }
@@ -455,7 +511,6 @@ export async function deleteAccount() {
 
     if (!user) return { error: "Unauthorized" };
 
-    // 1. Delete associated data
     await supabase.from("bills").delete().eq("store_id", user.id);
     await supabase.from("expenses").delete().eq("store_id", user.id);
     await supabase.from("products").delete().eq("store_id", user.id);
@@ -464,11 +519,9 @@ export async function deleteAccount() {
     await supabase.from("purchase_orders").delete().eq("store_id", user.id);
     await supabase.from("branchs").delete().eq("store_id", user.id);
 
-    // 2. Delete Store and User record
     await supabase.from("stores").delete().eq("owner_id", user.id);
     await supabase.from("users").delete().eq("id", user.id);
 
-    // 3. Sign out session
     await supabase.auth.signOut();
     redirect("/login");
 }

@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, Sparkles, UserPlus, KeyRound } from "lucide-react";
+import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, Sparkles, UserPlus, KeyRound, Shield, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { switchActiveStore } from "@/lib/actions/profile";
 import { joinStoreWithCode } from "@/app/actions/team";
@@ -17,6 +17,8 @@ import { LocationDialog } from "@/components/inventory/location-dialog";
 interface StoreBranchDropdownProps {
     storeName?: string;
     activeStoreId?: string;
+    userRole?: string;
+    assignedBranchId?: string | null;
     stores?: any[];
     locations?: any[];
 }
@@ -24,6 +26,8 @@ interface StoreBranchDropdownProps {
 export function StoreBranchDropdown({
     storeName = "My Store",
     activeStoreId,
+    userRole = "owner",
+    assignedBranchId,
     stores = [],
     locations = [],
 }: StoreBranchDropdownProps) {
@@ -36,13 +40,29 @@ export function StoreBranchDropdown({
     const [joining, setJoining] = useState(false);
     const [switchingStoreId, setSwitchingStoreId] = useState<string | null>(null);
 
-    // Active selected branch (defaults to main)
+    // Filter accessible locations based on employee assigned_branch_id
+    const accessibleLocations = assignedBranchId 
+        ? locations.filter(l => l.id === assignedBranchId)
+        : locations;
+
+    // Active selected branch (defaults to assigned or first available)
     const [selectedBranchId, setSelectedBranchId] = useState<string>(
-        locations[0]?.id || "main"
+        assignedBranchId || accessibleLocations[0]?.id || "main"
     );
 
-    const activeBranch = locations.find((l) => l.id === selectedBranchId);
-    const branchLabel = activeBranch ? activeBranch.name : (locations.length > 0 ? locations[0]?.name : "สาขาหลัก");
+    const activeBranch = accessibleLocations.find((l) => l.id === selectedBranchId);
+    const branchLabel = activeBranch ? activeBranch.name : (accessibleLocations.length > 0 ? accessibleLocations[0]?.name : "สาขาหลัก");
+
+    // Format Role Thai Label
+    const roleLabels: Record<string, { label: string; color: string }> = {
+        owner: { label: "เจ้าของร้าน", color: "bg-primary/10 text-primary border-primary/20" },
+        admin: { label: "ผู้จัดการสาขา", color: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20" },
+        accountant: { label: "ฝ่ายบัญชี", color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
+        stock_keeper: { label: "ผู้ดูแลคลัง", color: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
+        sales: { label: "พนักงานขาย", color: "bg-sky-500/10 text-sky-500 border-sky-500/20" },
+    };
+
+    const currentRoleBadge = roleLabels[userRole] || { label: userRole, color: "bg-muted text-muted-foreground border-border" };
 
     const handleSelectStore = async (store: any) => {
         setSwitchingStoreId(store.id);
@@ -102,8 +122,12 @@ export function StoreBranchDropdown({
                             </div>
                             <div className="flex flex-col min-w-0">
                                 <div className="flex items-center gap-1.5 leading-none">
-                                    <span className="text-xs font-bold text-foreground truncate max-w-[125px]">
+                                    <span className="text-xs font-bold text-foreground truncate max-w-[100px]">
                                         {storeName}
+                                    </span>
+                                    {/* Role Badge Indicator */}
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border shrink-0 ${currentRoleBadge.color}`}>
+                                        {currentRoleBadge.label}
                                     </span>
                                 </div>
                                 <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1 leading-none">
@@ -126,18 +150,20 @@ export function StoreBranchDropdown({
                                 </div>
                                 <div className="flex flex-col min-w-0">
                                     <span className="text-xs font-bold text-foreground truncate max-w-[100px]">{storeName}</span>
-                                    <span className="text-[10px] text-muted-foreground">ร้านปัจจุบัน</span>
+                                    <span className="text-[10px] font-semibold text-primary">ตำแหน่ง: {currentRoleBadge.label}</span>
                                 </div>
                             </div>
                             
                             {/* Action Buttons: 1. ตั้งค่า, 2. สลับร้าน */}
                             <div className="flex items-center gap-2 shrink-0">
-                                <Link href="/dashboard/store" onClick={() => setOpen(false)}>
-                                    <span className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer flex items-center gap-0.5 transition-colors">
-                                        <Settings className="h-3 w-3" />
-                                        ตั้งค่า
-                                    </span>
-                                </Link>
+                                {userRole === "owner" && (
+                                    <Link href="/dashboard/store" onClick={() => setOpen(false)}>
+                                        <span className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer flex items-center gap-0.5 transition-colors">
+                                            <Settings className="h-3 w-3" />
+                                            ตั้งค่า
+                                        </span>
+                                    </Link>
+                                )}
 
                                 <button
                                     type="button"
@@ -158,13 +184,13 @@ export function StoreBranchDropdown({
                     {/* Branches List Header */}
                     <div className="px-1 flex items-center justify-between">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            สาขาและคลัง ({locations.length > 0 ? locations.length : 1})
+                            สาขาที่คุณเข้าถึงได้ ({accessibleLocations.length > 0 ? accessibleLocations.length : 1})
                         </span>
                     </div>
 
                     {/* Branches Selection List */}
                     <div className="space-y-1 max-h-40 overflow-y-auto pr-0.5">
-                        {locations.length === 0 ? (
+                        {accessibleLocations.length === 0 ? (
                             <button
                                 onClick={() => {
                                     setSelectedBranchId("main");
@@ -186,7 +212,7 @@ export function StoreBranchDropdown({
                                 {selectedBranchId === "main" && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                             </button>
                         ) : (
-                            locations.map((loc) => {
+                            accessibleLocations.map((loc) => {
                                 const isSelected = selectedBranchId === loc.id;
                                 return (
                                     <button
@@ -219,29 +245,33 @@ export function StoreBranchDropdown({
 
                     {/* Bottom Action Buttons */}
                     <div className="pt-2 border-t border-border space-y-1">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setOpen(false);
-                                setCreateLocationOpen(true);
-                            }}
-                            className="w-full flex items-center gap-2 p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors font-medium cursor-pointer"
-                        >
-                            <Plus className="h-3.5 w-3.5 text-primary" />
-                            + เพิ่มสาขาใหม่
-                        </button>
+                        {userRole === "owner" && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setOpen(false);
+                                        setCreateLocationOpen(true);
+                                    }}
+                                    className="w-full flex items-center gap-2 p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors font-medium cursor-pointer"
+                                >
+                                    <Plus className="h-3.5 w-3.5 text-primary" />
+                                    + เพิ่มสาขาใหม่
+                                </button>
 
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setOpen(false);
-                                setCreateStoreOpen(true);
-                            }}
-                            className="w-full flex items-center gap-2 p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors font-medium cursor-pointer"
-                        >
-                            <Store className="h-3.5 w-3.5 text-primary" />
-                            + เพิ่มร้านใหม่
-                        </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setOpen(false);
+                                        setCreateStoreOpen(true);
+                                    }}
+                                    className="w-full flex items-center gap-2 p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors font-medium cursor-pointer"
+                                >
+                                    <Store className="h-3.5 w-3.5 text-primary" />
+                                    + เพิ่มร้านใหม่
+                                </button>
+                            </>
+                        )}
 
                         <button
                             type="button"
@@ -279,6 +309,9 @@ export function StoreBranchDropdown({
                         {stores.map((s) => {
                             const isCurrent = s.id === activeStoreId || s.store_name === storeName;
                             const isSwitching = switchingStoreId === s.id;
+                            const storeRole = s.user_role || (s.owner_id === s.id ? "owner" : "owner");
+                            const badge = roleLabels[storeRole] || roleLabels.owner;
+
                             return (
                                 <button
                                     key={s.id}
@@ -300,7 +333,12 @@ export function StoreBranchDropdown({
                                             )}
                                         </div>
                                         <div className="flex flex-col min-w-0">
-                                            <span className="text-xs font-bold truncate">{s.store_name}</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-xs font-bold truncate">{s.store_name}</span>
+                                                <span className={`text-[8px] font-semibold px-1 rounded border ${badge.color}`}>
+                                                    {badge.label}
+                                                </span>
+                                            </div>
                                             <span className="text-[10px] text-muted-foreground truncate">
                                                 {s.tax_id ? `Tax ID: ${s.tax_id}` : s.store_address || "ร้านค้าของคุณ"}
                                             </span>
@@ -337,18 +375,20 @@ export function StoreBranchDropdown({
                             ใส่รหัสเข้าร่วมร้าน
                         </Button>
 
-                        <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => {
-                                setSwitchStoreOpen(false);
-                                setCreateStoreOpen(true);
-                            }}
-                            className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
-                        >
-                            <Plus className="h-3.5 w-3.5" />
-                            สร้างร้านใหม่
-                        </Button>
+                        {userRole === "owner" && (
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => {
+                                    setSwitchStoreOpen(false);
+                                    setCreateStoreOpen(true);
+                                }}
+                                className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
+                            >
+                                <Plus className="h-3.5 w-3.5" />
+                                สร้างร้านใหม่
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

@@ -14,6 +14,7 @@ export default async function DashboardLayout({
     const stores = await getStores();
     const locations = await getLocations();
     const role = profile?.role || 'owner';
+    const assignedBranchId = profile?.assigned_branch_id || null;
 
     const storeName = storeProfile?.store_name || "";
     const activeStoreId = storeProfile?.id || "";
@@ -22,6 +23,7 @@ export default async function DashboardLayout({
         <div className="flex min-h-screen w-full overflow-x-hidden bg-background text-foreground">
             <Sidebar
                 userRole={role}
+                assignedBranchId={assignedBranchId}
                 storeName={storeName}
                 activeStoreId={activeStoreId}
                 stores={stores}
