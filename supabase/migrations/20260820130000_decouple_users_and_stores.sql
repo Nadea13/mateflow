@@ -1,5 +1,5 @@
 ﻿-- Migration: Full sync of all fields from auth.users to public.users & Decouple stores
--- Description: Creates / alters public.users ensuring all columns exist before syncing from auth.users
+-- Description: Ensures public.users exists with all columns, sets owner_id as FK referencing public.users(id) on stores, and sets store_id as FK referencing public.stores(id) on branchs
 
 DO $$
 BEGIN
@@ -11,7 +11,7 @@ BEGIN
         updated_at timestamptz DEFAULT now()
     );
 
-    -- 1.1 Ensure all comprehensive columns exist on public.users (in case users table already existed before)
+    -- 1.1 Ensure all comprehensive columns exist on public.users
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'phone') THEN
         ALTER TABLE public.users ADD COLUMN phone text;
     END IF;
@@ -55,7 +55,7 @@ BEGIN
     DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
     CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
-    -- Copy ALL existing users and attributes from auth.users into public.users
+    -- 2. Populate public.users first so FK constraint will always succeed
     INSERT INTO public.users (
         id, 
         email, 
@@ -99,20 +99,40 @@ BEGIN
         last_sign_in_at = EXCLUDED.last_sign_in_at,
         updated_at = now();
 
-    -- 2. Modify stores table to have independent UUID and owner_id
+    -- 3. Modify stores table to add owner_id with Foreign Key to public.users(id)
     IF EXISTS (
         SELECT 1 FROM information_schema.tables 
         WHERE table_schema = 'public' AND table_name = 'stores'
     ) THEN
+        -- Add owner_id column if not exists
         IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns 
             WHERE table_schema = 'public' AND table_name = 'stores' AND column_name = 'owner_id'
         ) THEN
-            ALTER TABLE public.stores ADD COLUMN owner_id uuid REFERENCES public.users(id) ON DELETE CASCADE;
+            ALTER TABLE public.stores ADD COLUMN owner_id uuid;
         END IF;
 
+        -- Populate owner_id with id (user id) before enforcing foreign key
         UPDATE public.stores SET owner_id = id WHERE owner_id IS NULL;
 
+        -- Explicitly enforce Foreign Key Constraint: stores.owner_id -> users.id
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE constraint_type = 'FOREIGN KEY' 
+            AND table_name = 'stores' 
+            AND constraint_name = 'fk_stores_owner_id'
+        ) THEN
+            -- Clean any orphan records if any
+            DELETE FROM public.stores WHERE owner_id NOT IN (SELECT id FROM public.users);
+            
+            ALTER TABLE public.stores 
+            ADD CONSTRAINT fk_stores_owner_id 
+            FOREIGN KEY (owner_id) 
+            REFERENCES public.users(id) 
+            ON DELETE CASCADE;
+        END IF;
+
+        -- Drop email column from stores
         IF EXISTS (
             SELECT 1 FROM information_schema.columns 
             WHERE table_schema = 'public' AND table_name = 'stores' AND column_name = 'email'
@@ -120,11 +140,13 @@ BEGIN
             ALTER TABLE public.stores DROP COLUMN email;
         END IF;
 
+        -- Set gen_random_uuid for store id
         ALTER TABLE public.stores ALTER COLUMN id SET DEFAULT gen_random_uuid();
     ELSE
+        -- Create stores from scratch with explicit Foreign Key
         CREATE TABLE public.stores (
             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            owner_id uuid REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+            owner_id uuid NOT NULL CONSTRAINT fk_stores_owner_id REFERENCES public.users(id) ON DELETE CASCADE,
             store_name text,
             avatar_url text,
             store_address text,
@@ -152,7 +174,7 @@ BEGIN
         CREATE POLICY "Users can manage own stores" ON public.stores FOR ALL USING (true) WITH CHECK (true);
     END IF;
 
-    -- 3. Update branchs table store_id foreign key reference
+    -- 4. Update branchs table with Foreign Key to stores(id)
     IF EXISTS (
         SELECT 1 FROM information_schema.tables 
         WHERE table_schema = 'public' AND table_name = 'branchs'
@@ -163,11 +185,25 @@ BEGIN
         ) THEN
             ALTER TABLE public.branchs ADD COLUMN store_id uuid;
         END IF;
+
+        -- Enforce FK: branchs.store_id -> stores.id
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE constraint_type = 'FOREIGN KEY' 
+            AND table_name = 'branchs' 
+            AND constraint_name = 'fk_branchs_store_id'
+        ) THEN
+            ALTER TABLE public.branchs 
+            ADD CONSTRAINT fk_branchs_store_id 
+            FOREIGN KEY (store_id) 
+            REFERENCES public.stores(id) 
+            ON DELETE CASCADE;
+        END IF;
     END IF;
 
 END $$;
 
--- 4. Create / Update trigger to auto-sync ALL fields from auth.users into public.users
+-- 5. Trigger to auto-sync ALL fields from auth.users into public.users
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
@@ -217,7 +253,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Safely drop existing trigger before recreating
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'on_auth_user_created') THEN
