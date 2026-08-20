@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { ImageUploadZone } from "@/components/ui/image-upload-zone";
 import { updateProfile } from "@/lib/actions/profile";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Store, Loader2, FileCheck2, PenTool, UploadCloud, X, Sparkles, Image as ImageIcon } from "lucide-react";
+import { Store, Loader2, FileCheck2, PenTool, ImageIcon } from "lucide-react";
 
 interface CreateStoreDialogProps {
     open: boolean;
@@ -19,53 +19,13 @@ interface CreateStoreDialogProps {
 
 export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
     const [loading, setLoading] = useState(false);
-    const [uploadingLogo, setUploadingLogo] = useState(false);
     const [storeName, setStoreName] = useState("");
     const [storePhone, setStorePhone] = useState("");
     const [taxId, setTaxId] = useState("");
     const [storeAddress, setStoreAddress] = useState("");
     const [avatarUrl, setAvatarUrl] = useState("");
     const [signatureUrl, setSignatureUrl] = useState("");
-    const logoInputRef = useRef<HTMLInputElement>(null);
     const router = useRouter();
-
-    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        // Check file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            toast.error("ขนาดไฟล์ต้องไม่เกิน 5MB");
-            return;
-        }
-
-        const objectUrl = URL.createObjectURL(file);
-        setAvatarUrl(objectUrl);
-        setUploadingLogo(true);
-
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("folder", "avatars");
-
-            const res = await fetch("/api/upload", {
-                method: "POST",
-                body: formData,
-            });
-
-            const data = await res.json();
-            if (!res.ok || !data.success) {
-                throw new Error(data.error || "Upload failed");
-            }
-
-            setAvatarUrl(data.url);
-            toast.success("อัปโหลดโลโก้ร้านค้าสำเร็จ!");
-        } catch (err: any) {
-            toast.error(err.message || "Failed to upload logo");
-        } finally {
-            setUploadingLogo(false);
-        }
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -101,7 +61,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader className="pb-2 border-b border-border/60">
                         <div className="flex items-center gap-2.5">
@@ -118,80 +78,25 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                     </DialogHeader>
 
                     <div className="grid gap-4 py-4">
-                        {/* High-End 1:1 Brand Logo Upload Dropzone */}
-                        <div className="flex flex-col items-center justify-center space-y-1.5">
-                            <div
-                                onClick={() => logoInputRef.current?.click()}
-                                className="relative group cursor-pointer"
-                            >
-                                <input
-                                    ref={logoInputRef}
-                                    type="file"
-                                    accept="image/png, image/jpeg, image/webp, image/svg+xml"
-                                    onChange={handleLogoUpload}
-                                    className="hidden"
-                                    disabled={uploadingLogo}
-                                />
-
-                                <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-border/80 group-hover:border-primary bg-muted/20 group-hover:bg-primary/[0.03] overflow-hidden flex flex-col items-center justify-center transition-all duration-200 shadow-2xs">
-                                    {avatarUrl ? (
-                                        <img
-                                            src={avatarUrl}
-                                            alt="Store Logo"
-                                            className="w-full h-full object-cover"
-                                        />
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center p-2 text-center">
-                                            {uploadingLogo ? (
-                                                <Loader2 className="h-6 w-6 text-primary animate-spin" />
-                                            ) : (
-                                                <>
-                                                    <div className="p-2 rounded-full bg-primary/10 text-primary group-hover:scale-110 transition-transform mb-1">
-                                                        <UploadCloud className="h-5 w-5" />
-                                                    </div>
-                                                    <span className="text-[10px] text-foreground font-semibold">
-                                                        อัปโหลดโลโก้
-                                                    </span>
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {uploadingLogo && (
-                                        <div className="absolute inset-0 bg-background/70 flex items-center justify-center rounded-2xl backdrop-blur-2xs">
-                                            <Loader2 className="h-6 w-6 text-primary animate-spin" />
-                                        </div>
-                                    )}
-                                </div>
-
-                                {avatarUrl && !uploadingLogo && (
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setAvatarUrl("");
-                                            if (logoInputRef.current) logoInputRef.current.value = "";
-                                        }}
-                                        className="absolute -top-1.5 -right-1.5 p-1 bg-destructive text-destructive-foreground rounded-full shadow-xs hover:opacity-90 transition-opacity"
-                                        title="ลบรูปภาพ"
-                                    >
-                                        <X className="h-3 w-3" />
-                                    </button>
-                                )}
+                        {/* 1. โลโก้ร้านค้า (Store Logo Upload Zone - แบบเดียวกับลายเซ็นต์) */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5 mb-1">
+                                <ImageIcon className="h-3.5 w-3.5 text-primary" />
+                                <Label className="text-xs font-semibold">โลโก้ร้านค้า (Store Logo)</Label>
                             </div>
-
-                            {/* Clear Format & Size Hint */}
-                            <div className="text-center space-y-0.5">
-                                <p className="text-xs font-semibold text-foreground">
-                                    โลโก้ร้านค้า (Store Logo)
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">
-                                    รองรับ <strong className="text-foreground">PNG, JPG, WebP, SVG</strong> (อัตราส่วน 1:1, ขนาดไม่เกิน 5MB)
-                                </p>
-                            </div>
+                            <ImageUploadZone
+                                value={avatarUrl}
+                                onChange={(url) => setAvatarUrl(url)}
+                                folder="avatars"
+                                label="อัปโหลดโลโก้ร้านค้า"
+                                className="w-full"
+                            />
+                            <p className="text-[10px] text-muted-foreground">
+                                แนะนำภาพอัตราส่วน 1:1 (PNG, JPG, WebP) ขนาดไม่เกิน 5MB สำหรับแสดงบนหัวบิลและแถบเมนู
+                            </p>
                         </div>
 
-                        {/* Store Name */}
+                        {/* 2. ชื่อร้านค้า */}
                         <div className="space-y-1.5">
                             <Label htmlFor="store-name" className="text-xs font-semibold">ชื่อร้านค้า / บริษัท *</Label>
                             <Input
@@ -204,7 +109,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             />
                         </div>
 
-                        {/* Phone & Tax ID */}
+                        {/* 3. เบอร์โทร และ เลขประจำตัวผู้เสียภาษี */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <Label htmlFor="store-phone" className="text-xs font-semibold">เบอร์โทรศัพท์</Label>
@@ -232,7 +137,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             </div>
                         </div>
 
-                        {/* Store Address */}
+                        {/* 4. ที่อยู่ร้านค้า */}
                         <div className="space-y-1.5">
                             <Label htmlFor="store-address" className="text-xs font-semibold">ที่อยู่ร้านค้า / สำนักงานใหญ่</Label>
                             <Textarea
@@ -244,7 +149,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             />
                         </div>
 
-                        {/* Authorized Signature Upload (Cloudflare R2) */}
+                        {/* 5. ลายเซ็นต์ผู้มีอำนาจ */}
                         <div className="space-y-1.5 border-t border-border/60 pt-3">
                             <div className="flex items-center gap-1.5 mb-1">
                                 <PenTool className="h-3.5 w-3.5 text-primary" />
@@ -254,7 +159,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                 value={signatureUrl}
                                 onChange={(url) => setSignatureUrl(url)}
                                 folder="signatures"
-                                label=""
+                                label="อัปโหลดรูปลายเซ็นต์"
                                 className="w-full"
                             />
                             <p className="text-[10px] text-muted-foreground">
