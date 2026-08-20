@@ -1,63 +1,48 @@
 ﻿"use client";
 
 import { useState } from "react";
-import { Store, Building2, ChevronDown, Plus, Check, Settings, ArrowLeftRight, CheckCircle2, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { LocationDialog } from "@/components/inventory/location-dialog";
-import { CreateStoreDialog } from "@/components/store/create-store-dialog";
-import { switchActiveStore } from "@/lib/actions/profile";
-import { Location } from "@/types";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, Sparkles, UserPlus, KeyRound } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { switchActiveStore } from "@/lib/actions/profile";
+import { joinStoreWithCode } from "@/app/actions/team";
 import { toast } from "sonner";
+import { CreateStoreDialog } from "@/components/store/create-store-dialog";
+import { LocationDialog } from "@/components/inventory/location-dialog";
 
 interface StoreBranchDropdownProps {
     storeName?: string;
     activeStoreId?: string;
     stores?: any[];
-    locations?: Location[];
+    locations?: any[];
 }
 
 export function StoreBranchDropdown({
-    storeName,
+    storeName = "My Store",
     activeStoreId,
     stores = [],
     locations = [],
 }: StoreBranchDropdownProps) {
-    const router = useRouter();
     const [open, setOpen] = useState(false);
-    const [addBranchOpen, setAddBranchOpen] = useState(false);
     const [createStoreOpen, setCreateStoreOpen] = useState(false);
+    const [createLocationOpen, setCreateLocationOpen] = useState(false);
     const [switchStoreOpen, setSwitchStoreOpen] = useState(false);
+    const [joinStoreOpen, setJoinStoreOpen] = useState(false);
+    const [joinCode, setJoinCode] = useState("");
+    const [joining, setJoining] = useState(false);
     const [switchingStoreId, setSwitchingStoreId] = useState<string | null>(null);
-    const [selectedBranchId, setSelectedBranchId] = useState<string>(locations[0]?.id || "main");
 
-    const hasStore = !!storeName && storeName.trim().length > 0;
+    // Active selected branch (defaults to main)
+    const [selectedBranchId, setSelectedBranchId] = useState<string>(
+        locations[0]?.id || "main"
+    );
+
     const activeBranch = locations.find((l) => l.id === selectedBranchId);
-    const branchLabel = activeBranch ? activeBranch.name : "สาขาหลัก (Headquarters)";
-
-    // IF NO STORE YET: Render Clean Single "+" Button that triggers Dialog
-    if (!hasStore) {
-        return (
-            <>
-                <Button
-                    size="sm"
-                    onClick={() => setCreateStoreOpen(true)}
-                    className="w-full h-9 text-xs font-semibold gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs rounded-lg justify-start px-3 cursor-pointer"
-                >
-                    <Plus className="h-4 w-4 shrink-0" />
-                    <span className="truncate">สร้างร้านค้าของคุณ</span>
-                </Button>
-
-                <CreateStoreDialog
-                    open={createStoreOpen}
-                    setOpen={setCreateStoreOpen}
-                />
-            </>
-        );
-    }
+    const branchLabel = activeBranch ? activeBranch.name : (locations.length > 0 ? locations[0]?.name : "สาขาหลัก");
 
     const handleSelectStore = async (store: any) => {
         setSwitchingStoreId(store.id);
@@ -75,6 +60,34 @@ export function StoreBranchDropdown({
             toast.error(err?.message || "Error switching store");
         } finally {
             setSwitchingStoreId(null);
+        }
+    };
+
+    const handleJoinSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!joinCode.trim()) {
+            toast.error("กรุณากรอกรหัสร้านค้า (Store Code)");
+            return;
+        }
+
+        setJoining(true);
+        try {
+            const formData = new FormData();
+            formData.append("storeCode", joinCode.trim().toUpperCase());
+            const res = await joinStoreWithCode(formData);
+
+            if (res?.success) {
+                toast.success("เข้าร่วมทีมร้านค้าสำเร็จแล้ว!");
+                setJoinStoreOpen(false);
+                setJoinCode("");
+                window.location.reload();
+            } else {
+                toast.error(res?.error || "รหัสไม่ถูกต้อง หรือหมดอายุ");
+            }
+        } catch (err: any) {
+            toast.error(err?.message || "เกิดข้อผิดพลาดในการเข้าร่วมร้าน");
+        } finally {
+            setJoining(false);
         }
     };
 
@@ -104,7 +117,7 @@ export function StoreBranchDropdown({
                 </PopoverTrigger>
 
                 <PopoverContent align="start" side="bottom" className="w-72 p-2 shadow-2xl border-border bg-popover/95 backdrop-blur-xl rounded-xl space-y-2.5 z-50">
-                    {/* Active Store Header & Actions (Settings + Switch Store Button on the right) */}
+                    {/* Active Store Header & Actions */}
                     <div className="p-2.5 rounded-lg bg-muted/50 border border-border/60">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 min-w-0">
@@ -117,7 +130,7 @@ export function StoreBranchDropdown({
                                 </div>
                             </div>
                             
-                            {/* Action Buttons: 1. ตั้งค่า, 2. สลับร้าน (ทางขวาของตั้งค่า) */}
+                            {/* Action Buttons: 1. ตั้งค่า, 2. สลับร้าน */}
                             <div className="flex items-center gap-2 shrink-0">
                                 <Link href="/dashboard/store" onClick={() => setOpen(false)}>
                                     <span className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer flex items-center gap-0.5 transition-colors">
@@ -151,7 +164,6 @@ export function StoreBranchDropdown({
 
                     {/* Branches Selection List */}
                     <div className="space-y-1 max-h-40 overflow-y-auto pr-0.5">
-                        {/* Default / Primary Headquarters Branch */}
                         {locations.length === 0 ? (
                             <button
                                 onClick={() => {
@@ -205,38 +217,48 @@ export function StoreBranchDropdown({
                         )}
                     </div>
 
-                    {/* Bottom Actions: 1. Add Branch, 2. Add New Store */}
-                    <div className="pt-1.5 border-t border-border/60 space-y-1">
-                        <Button
-                            size="sm"
-                            variant="ghost"
+                    {/* Bottom Action Buttons */}
+                    <div className="pt-2 border-t border-border space-y-1">
+                        <button
+                            type="button"
                             onClick={() => {
                                 setOpen(false);
-                                setAddBranchOpen(true);
+                                setCreateLocationOpen(true);
                             }}
-                            className="w-full h-8 text-xs font-semibold justify-center gap-1.5 text-primary hover:bg-primary/10 hover:text-primary rounded-lg cursor-pointer"
+                            className="w-full flex items-center gap-2 p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors font-medium cursor-pointer"
                         >
-                            <Plus className="h-3.5 w-3.5" />
-                            <span>+ เพิ่มสาขาใหม่</span>
-                        </Button>
+                            <Plus className="h-3.5 w-3.5 text-primary" />
+                            + เพิ่มสาขาใหม่
+                        </button>
 
-                        <Button
-                            size="sm"
-                            variant="outline"
+                        <button
+                            type="button"
                             onClick={() => {
                                 setOpen(false);
                                 setCreateStoreOpen(true);
                             }}
-                            className="w-full h-8 text-xs font-semibold justify-center gap-1.5 border-border hover:bg-muted/60 text-muted-foreground hover:text-foreground rounded-lg cursor-pointer"
+                            className="w-full flex items-center gap-2 p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors font-medium cursor-pointer"
                         >
-                            <Store className="h-3.5 w-3.5" />
-                            <span>+ เพิ่มร้านใหม่</span>
-                        </Button>
+                            <Store className="h-3.5 w-3.5 text-primary" />
+                            + เพิ่มร้านใหม่
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setOpen(false);
+                                setJoinStoreOpen(true);
+                            }}
+                            className="w-full flex items-center gap-2 p-1.5 text-xs text-primary hover:bg-primary/10 rounded-md transition-colors font-semibold cursor-pointer"
+                        >
+                            <UserPlus className="h-3.5 w-3.5 text-primary" />
+                            เข้าร่วมร้านด้วยรหัส (Join Team)
+                        </button>
                     </div>
                 </PopoverContent>
             </Popover>
 
-            {/* Modal Switch Store (เลือกร้านค้า) */}
+            {/* Modal 1: Switch Store Dialog */}
             <Dialog open={switchStoreOpen} onOpenChange={setSwitchStoreOpen}>
                 <DialogContent className="sm:max-w-[420px]">
                     <DialogHeader>
@@ -245,90 +267,161 @@ export function StoreBranchDropdown({
                                 <ArrowLeftRight className="h-5 w-5" />
                             </div>
                             <div>
-                                <DialogTitle className="text-base font-semibold">เลือกร้านค้าที่ต้องการจัดการ</DialogTitle>
+                                <DialogTitle className="text-base font-semibold">เลือกและสลับร้านค้า</DialogTitle>
                                 <DialogDescription className="text-xs text-muted-foreground">
-                                    คุณมีร้านค้าทั้งหมด {stores.length > 0 ? stores.length : 1} ร้าน
+                                    คุณมีร้านค้าทั้งหมด {stores.length} ร้าน
                                 </DialogDescription>
                             </div>
                         </div>
                     </DialogHeader>
 
-                    <div className="space-y-2 py-3 max-h-64 overflow-y-auto">
-                        {stores.length === 0 ? (
-                            <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 flex items-center justify-between">
-                                <div className="flex items-center gap-2.5">
-                                    <Store className="h-4 w-4 text-primary" />
-                                    <span className="text-xs font-semibold">{storeName}</span>
-                                </div>
-                                <span className="text-[10px] text-primary font-bold">กำลังใช้งาน</span>
-                            </div>
-                        ) : (
-                            stores.map((s) => {
-                                const isCurrent = (s.id === activeStoreId) || (s.store_name === storeName);
-                                const isSwitching = switchingStoreId === s.id;
-                                return (
-                                    <button
-                                        key={s.id}
-                                        disabled={isSwitching}
-                                        onClick={() => handleSelectStore(s)}
-                                        className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                                            isCurrent
-                                                ? "border-primary bg-primary/10 shadow-xs"
-                                                : "border-border/80 hover:border-primary/40 hover:bg-muted/50"
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-3 min-w-0">
+                    <div className="space-y-2 py-3 max-h-[260px] overflow-y-auto">
+                        {stores.map((s) => {
+                            const isCurrent = s.id === activeStoreId || s.store_name === storeName;
+                            const isSwitching = switchingStoreId === s.id;
+                            return (
+                                <button
+                                    key={s.id}
+                                    type="button"
+                                    onClick={() => handleSelectStore(s)}
+                                    disabled={isCurrent || !!switchingStoreId}
+                                    className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
+                                        isCurrent
+                                            ? "border-primary/40 bg-primary/5 text-foreground shadow-2xs"
+                                            : "border-border/80 hover:border-primary/40 hover:bg-muted/40 text-foreground cursor-pointer"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0 overflow-hidden">
                                             {s.avatar_url ? (
-                                                <img src={s.avatar_url} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                                                <img src={s.avatar_url} alt="" className="w-full h-full object-cover" />
                                             ) : (
-                                                <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
-                                                    <Store className="h-4 w-4" />
-                                                </div>
+                                                s.store_name?.charAt(0)?.toUpperCase() || "S"
                                             )}
-                                            <div className="flex flex-col min-w-0">
-                                                <span className="text-xs font-bold text-foreground truncate">{s.store_name || "ไม่มีชื่อร้าน"}</span>
-                                                <span className="text-[10px] text-muted-foreground truncate">{s.store_phone || s.store_address || "ร้านค้าของคุณ"}</span>
-                                            </div>
                                         </div>
-                                        <div className="shrink-0 flex items-center">
-                                            {isSwitching ? (
-                                                <Loader2 className="h-4 w-4 text-primary animate-spin" />
-                                            ) : isCurrent ? (
-                                                <CheckCircle2 className="h-4 w-4 text-primary" />
-                                            ) : null}
+                                        <div className="flex flex-col min-w-0">
+                                            <span className="text-xs font-bold truncate">{s.store_name}</span>
+                                            <span className="text-[10px] text-muted-foreground truncate">
+                                                {s.tax_id ? `Tax ID: ${s.tax_id}` : s.store_address || "ร้านค้าของคุณ"}
+                                            </span>
                                         </div>
-                                    </button>
-                                );
-                            })
-                        )}
+                                    </div>
+                                    {isSwitching ? (
+                                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                    ) : isCurrent ? (
+                                        <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                                            ใช้งานอยู่
+                                        </span>
+                                    ) : (
+                                        <span className="text-[10px] text-muted-foreground hover:text-foreground">
+                                            เลือก
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
                     </div>
 
-                    <div className="pt-2 border-t border-border/60">
+                    <DialogFooter className="flex-row items-center justify-between sm:justify-between border-t border-border pt-3">
                         <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setSwitchStoreOpen(false);
+                                setJoinStoreOpen(true);
+                            }}
+                            className="h-8 text-xs font-semibold gap-1 text-primary cursor-pointer"
+                        >
+                            <UserPlus className="h-3.5 w-3.5" />
+                            ใส่รหัสเข้าร่วมร้าน
+                        </Button>
+
+                        <Button
+                            type="button"
                             size="sm"
                             onClick={() => {
                                 setSwitchStoreOpen(false);
                                 setCreateStoreOpen(true);
                             }}
-                            className="w-full h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
+                            className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
                         >
                             <Plus className="h-3.5 w-3.5" />
-                            สร้างร้านค้าใหม่อีกร้าน
+                            สร้างร้านใหม่
                         </Button>
-                    </div>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* Modal for adding a new location/branch */}
-            <LocationDialog
-                open={addBranchOpen}
-                setOpen={setAddBranchOpen}
-            />
+            {/* Modal 2: Join Store with Code Dialog */}
+            <Dialog open={joinStoreOpen} onOpenChange={setJoinStoreOpen}>
+                <DialogContent className="sm:max-w-[400px]">
+                    <form onSubmit={handleJoinSubmit}>
+                        <DialogHeader>
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                                    <KeyRound className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <DialogTitle className="text-base font-semibold">เข้าร่วมทีมร้านค้า</DialogTitle>
+                                    <DialogDescription className="text-xs text-muted-foreground">
+                                        กรอกรหัสเชิญ (เช่น MF-A8B9C2) ที่ได้รับจากเจ้าของร้าน
+                                    </DialogDescription>
+                                </div>
+                            </div>
+                        </DialogHeader>
 
-            {/* Modal for adding a new store */}
+                        <div className="py-4 space-y-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="join-code" className="text-xs font-semibold">
+                                    รหัสร้านค้า (Store Code) *
+                                </Label>
+                                <Input
+                                    id="join-code"
+                                    value={joinCode}
+                                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                                    placeholder="MF-XXXXXX"
+                                    className="h-11 text-center font-mono text-lg tracking-widest uppercase font-bold"
+                                    required
+                                    maxLength={10}
+                                />
+                            </div>
+                        </div>
+
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setJoinStoreOpen(false)}
+                                className="h-8 text-xs cursor-pointer"
+                            >
+                                ยกเลิก
+                            </Button>
+                            <Button
+                                type="submit"
+                                size="sm"
+                                disabled={joining}
+                                className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
+                            >
+                                {joining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                ยืนยันการเข้าร่วม
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal 3: Create Store Dialog */}
             <CreateStoreDialog
                 open={createStoreOpen}
                 setOpen={setCreateStoreOpen}
+            />
+
+            {/* Modal 4: Location Dialog */}
+            <LocationDialog
+                open={createLocationOpen}
+                setOpen={setCreateLocationOpen}
             />
         </>
     );
