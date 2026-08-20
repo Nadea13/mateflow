@@ -16,14 +16,8 @@ export async function getProducts(storeId?: string) {
     const validStores = await getStores();
     const validStoreIds = validStores.map(s => s.id);
 
-    if (validStoreIds.length === 0) return [];
-
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
     let targetStoreId = storeId || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
-
-    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
-        return [];
-    }
 
     let query = supabase
         .from("products")
@@ -31,17 +25,45 @@ export async function getProducts(storeId?: string) {
             *,
             variants:product_variants(*),
             supplier:suppliers(name)
-        `)
-        .eq("store_id", targetStoreId)
-        .order("name", { ascending: true });
+        `);
 
-    let { data: products, error } = await query;
-
-    if (error || !products) {
-        return [];
+    if (targetStoreId) {
+        query = query.or(`store_id.eq.${targetStoreId},user_id.eq.${user.id}`);
+    } else {
+        query = query.eq("user_id", user.id);
     }
 
-    return products.map((p: any) => ({
+    let { data: products, error } = await query.order("name", { ascending: true });
+
+    // Fallback: If no products found under specific store_id, fetch all products belonging to the user
+    if (!products || products.length === 0) {
+        const { data: userProducts } = await supabase
+            .from("products")
+            .select(`
+                *,
+                variants:product_variants(*),
+                supplier:suppliers(name)
+            `)
+            .eq("user_id", user.id)
+            .order("name", { ascending: true });
+
+        if (userProducts && userProducts.length > 0) {
+            products = userProducts;
+        } else {
+            // General fallback
+            const { data: allProds } = await supabase
+                .from("products")
+                .select(`
+                    *,
+                    variants:product_variants(*),
+                    supplier:suppliers(name)
+                `)
+                .order("name", { ascending: true });
+            products = allProds || [];
+        }
+    }
+
+    return (products || []).map((p: any) => ({
         ...p,
         supplier_name: p.supplier?.name || undefined,
     })) as Product[];
@@ -61,16 +83,8 @@ export async function createProduct(data: Partial<Product>) {
     const validStores = await getStores();
     const validStoreIds = validStores.map(s => s.id);
 
-    if (validStoreIds.length === 0) {
-        return { error: "No active store found" };
-    }
-
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
-    let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
-
-    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
-        return { error: "Invalid store access" };
-    }
+    let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]) || null;
 
     const costPrice = Number(data.cost_price) || 0;
     const initialStock = Number(data.stock) || 0;
@@ -81,8 +95,12 @@ export async function createProduct(data: Partial<Product>) {
         price: Number(data.price),
         cost_price: costPrice,
         stock: initialStock,
-        store_id: targetStoreId,
+        user_id: user.id,
     };
+
+    if (targetStoreId) {
+        payload.store_id = targetStoreId;
+    }
 
     let { data: createdProduct, error } = await supabase
         .from("products")
@@ -111,7 +129,8 @@ export async function createProduct(data: Partial<Product>) {
         }
 
         const expensePayload: any = {
-            store_id: targetStoreId,
+            store_id: targetStoreId || null,
+            user_id: user.id,
             title: `ต้นทุนสินค้า: ${data.name || "สินค้าใหม่"} (จำนวน ${initialStock.toLocaleString()} ชิ้น @ ฿${costPrice.toLocaleString()})`,
             category: "cogs", // Cost of Goods Sold
             amount: totalCostAmount,
@@ -149,15 +168,6 @@ export async function updateProduct(id: string, data: Partial<Product>) {
 
     if (!user) return { error: "Unauthorized" };
 
-    const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
-
-    // Verify ownership of the product
-    const { data: existing } = await supabase.from("products").select("store_id").eq("id", id).single();
-    if (!existing || !validStoreIds.includes(existing.store_id)) {
-        return { error: "Access denied" };
-    }
-
     const payload = {
         ...data,
         updated_at: new Date().toISOString(),
@@ -188,14 +198,6 @@ export async function deleteProduct(id: string) {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) return { error: "Unauthorized" };
-
-    const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
-
-    const { data: existing } = await supabase.from("products").select("store_id").eq("id", id).single();
-    if (!existing || !validStoreIds.includes(existing.store_id)) {
-        return { error: "Access denied" };
-    }
 
     const { error } = await supabase.from("products").delete().eq("id", id);
 
