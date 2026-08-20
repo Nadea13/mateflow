@@ -12,29 +12,40 @@ export async function getLocations(storeId?: string) {
 
     if (!user) return [];
 
-    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+    // 1. Determine target active store
+    let targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
 
-    let query = supabase.from("branchs").select("*").order("created_at", { ascending: true });
+    if (!targetStoreId) {
+        const { data: defaultStore } = await supabase
+            .from("stores")
+            .select("id")
+            .eq("owner_id", user.id)
+            .order("created_at", { ascending: true })
+            .maybeSingle();
 
-    if (targetStoreId) {
-        query = query.eq("store_id", targetStoreId);
+        if (defaultStore) {
+            targetStoreId = defaultStore.id;
+        }
     }
 
-    let { data: branchs, error } = await query;
+    if (!targetStoreId) return [];
 
-    if (error || !branchs || branchs.length === 0) {
-        // Fallback for backward compatibility or when store_id was not yet populated
-        const fallback = await supabase
-            .from("branchs")
-            .select("*")
-            .order("created_at", { ascending: true });
-        branchs = fallback.data || [];
+    // 2. Fetch ONLY branches belonging to this active store
+    const { data: branchs, error } = await supabase
+        .from("branchs")
+        .select("*")
+        .eq("store_id", targetStoreId)
+        .order("created_at", { ascending: true });
+
+    if (error || !branchs) {
+        console.error("Error fetching branches for store:", error);
+        return [];
     }
 
     return branchs.map((b: any) => ({
         ...b,
-        user_id: b.store_id || b.user_id,
-        store_id: b.store_id || b.user_id,
+        user_id: b.store_id || user.id,
+        store_id: b.store_id,
     })) as Location[];
 }
 
@@ -47,24 +58,36 @@ export async function createLocation(data: Partial<Location>) {
         return { error: "Unauthorized" };
     }
 
-    const targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value || user.id;
+    // Determine target active store
+    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
+
+    if (!targetStoreId) {
+        const { data: defaultStore } = await supabase
+            .from("stores")
+            .select("id")
+            .eq("owner_id", user.id)
+            .order("created_at", { ascending: true })
+            .maybeSingle();
+
+        if (defaultStore) {
+            targetStoreId = defaultStore.id;
+        }
+    }
+
+    if (!targetStoreId) {
+        return { error: "กรุณาสร้างหรือเลือกร้านค้าก่อนเพิ่มสาขา" };
+    }
 
     const payload: any = {
-        ...data,
         store_id: targetStoreId,
+        name: data.name,
+        code: data.code || null,
+        type: data.type || "warehouse",
+        country: data.country || "TH",
+        address: data.address || null,
     };
 
-    // Try inserting into branchs table with store_id
-    let { error } = await supabase.from("branchs").insert(payload);
-
-    if (error) {
-        // Fallback to locations table with user_id
-        const fallback = await supabase.from("locations").insert({
-            ...data,
-            user_id: user.id,
-        });
-        error = fallback.error;
-    }
+    const { error } = await supabase.from("branchs").insert(payload);
 
     if (error) {
         console.error("Error creating branch:", error);
@@ -74,7 +97,7 @@ export async function createLocation(data: Partial<Location>) {
     revalidatePath("/dashboard/inventory", "page");
     revalidatePath("/dashboard/catalog", "page");
     revalidatePath("/dashboard/store", "page");
-    revalidatePath("/dashboard");
+    revalidatePath("/dashboard", "layout");
     return { success: true };
 }
 
@@ -82,19 +105,10 @@ export async function updateLocation(id: string, data: Partial<Location>) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    let { error } = await supabase.from("branchs").update({
+    const { error } = await supabase.from("branchs").update({
         ...data,
         updated_at: new Date().toISOString()
     }).eq("id", id);
-
-    if (error) {
-        // Fallback to locations table
-        const fallback = await supabase.from("locations").update({
-            ...data,
-            updated_at: new Date().toISOString()
-        }).eq("id", id);
-        error = fallback.error;
-    }
 
     if (error) {
         console.error("Error updating branch:", error);
@@ -104,7 +118,7 @@ export async function updateLocation(id: string, data: Partial<Location>) {
     revalidatePath("/dashboard/inventory", "page");
     revalidatePath("/dashboard/catalog", "page");
     revalidatePath("/dashboard/store", "page");
-    revalidatePath("/dashboard");
+    revalidatePath("/dashboard", "layout");
     return { success: true };
 }
 
@@ -125,21 +139,11 @@ export async function getInventoryLevels(locationId?: string) {
     let { data, error } = await query;
 
     if (error) {
-        // Fallback to locations relation
-        const fallbackQuery = supabase.from("inventory_levels").select(`
-            *,
-            location:locations(name),
-            product:products(name)
-        `);
-        const fallbackRes = locationId ? await fallbackQuery.eq("location_id", locationId) : await fallbackQuery;
-        data = fallbackRes.data;
-    }
-
-    if (!data) {
+        console.error("Error fetching inventory levels:", error);
         return [];
     }
 
-    return data.map((item: any) => ({
+    return (data || []).map((item: any) => ({
         ...item,
         location_name: item.location?.name,
         product_name: item.product?.name
@@ -193,6 +197,6 @@ export async function adjustInventory(productId: string, locationId: string, qua
 
     revalidatePath("/dashboard/catalog", "page");
     revalidatePath("/dashboard/inventory", "page");
-    revalidatePath("/dashboard/catalog");
+    revalidatePath("/dashboard", "layout");
     return { success: true, newQuantity, totalStock };
 }
