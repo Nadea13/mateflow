@@ -92,15 +92,17 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                 signature_url: signatureUrl || undefined,
             }) as any;
 
-            if (res.success) {
+            if (res?.success) {
                 toast.success("สร้างร้านค้าเรียบร้อยแล้ว!");
                 setOpen(false);
-                router.refresh();
+                // Hard refresh/revalidate to immediately update layout & sidebar state
+                window.location.reload();
             } else {
-                toast.error(res.error || "Failed to create store");
+                toast.error(res?.error || "Failed to create store");
             }
-        } catch {
-            toast.error("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+        } catch (err: any) {
+            console.error("Create store error:", err);
+            toast.error(err?.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
         } finally {
             setLoading(false);
         }
