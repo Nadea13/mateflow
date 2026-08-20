@@ -157,18 +157,27 @@ export async function createProduct(data: Partial<Product>) {
 
         const expensePayload: any = {
             store_id: targetStoreId || null,
+            user_id: user.id,
             title: `ต้นทุนสินค้า: ${data.name || "สินค้าใหม่"} (จำนวน ${initialStock.toLocaleString()} ชิ้น @ ฿${costPrice.toLocaleString()})`,
             category: "cogs", // Cost of Goods Sold
             amount: totalCostAmount,
             date: new Date().toISOString().split("T")[0],
             notes: `บันทึกต้นทุนอัตโนมัติจากการเพิ่มสินค้าเข้าคลัง (SKU: ${data.sku || "-"})`,
+            description: `บันทึกต้นทุนอัตโนมัติจากการเพิ่มสินค้าเข้าคลัง (SKU: ${data.sku || "-"})`,
             supplier_id: data.supplier_id || null,
             supplier_name: supplierName || null,
         };
 
-        const { error: expenseErr } = await supabase
+        let { error: expenseErr } = await supabase
             .from("expenses")
             .insert(expensePayload);
+
+        // Fallback if schema doesn't have user_id in expenses
+        if (expenseErr && (expenseErr.code === "PGRST204" || expenseErr.message?.includes("user_id"))) {
+            delete expensePayload.user_id;
+            const retryRes = await supabase.from("expenses").insert(expensePayload);
+            expenseErr = retryRes.error;
+        }
 
         if (expenseErr) {
             console.warn("Auto expense insertion notice:", expenseErr.message);
