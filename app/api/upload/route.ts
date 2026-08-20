@@ -49,11 +49,19 @@ export async function POST(req: NextRequest) {
         const fileName = `${folder}/${user.id}-${timestamp}-${randomString}.avif`;
 
         // Upload optimized AVIF buffer to Cloudflare R2
-        const publicUrl = await uploadToR2(avifBuffer, fileName, "image/avif");
+        const uploadResult = await uploadToR2(avifBuffer, fileName, "image/avif", folder);
+
+        if (!uploadResult.success || !uploadResult.url) {
+            return NextResponse.json(
+                { error: uploadResult.error || "Failed to upload image to Cloudflare R2" },
+                { status: 500 }
+            );
+        }
 
         return NextResponse.json({
             success: true,
-            url: publicUrl,
+            url: uploadResult.url,
+            key: uploadResult.key,
             format: "avif",
             originalSize: inputBuffer.length,
             optimizedSize: avifBuffer.length,
