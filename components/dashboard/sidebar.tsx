@@ -19,6 +19,7 @@ import { useTranslation } from "@/lib/i18n/provider"
 import { MateFlowLogo } from "@/components/brand/mateflow-logo"
 import { StoreBranchDropdown } from "@/components/dashboard/store-branch-dropdown"
 import { Location, Store as StoreType } from "@/types"
+import { signOutUser } from "@/lib/actions/profile"
 
 const sidebarItems = [
     {
@@ -146,6 +147,19 @@ export function Sidebar({
                             )
                         })}
                     </nav>
+                </div>
+
+                {/* Logout Button Section at Bottom of Sidebar */}
+                <div className="p-3 border-t border-border mt-auto">
+                    <form action={signOutUser}>
+                        <button
+                            type="submit"
+                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer"
+                        >
+                            <LogOut className="h-4 w-4 shrink-0" />
+                            <span>ออกจากระบบ (Logout)</span>
+                        </button>
+                    </form>
                 </div>
             </div>
         </aside>
