@@ -24,7 +24,6 @@ export async function getUserProfile() {
     const validStores = await getStores();
     const store = validStores[0] || null;
 
-    // Default to 'owner' so owners never lose settings/store/billing menus
     let resolvedRole = "owner";
     if (store) {
         if (store.user_role) {
@@ -79,7 +78,24 @@ export async function getStoreProfile(storeId?: string) {
     if (!user) return null;
 
     const validStores = await getStores();
-    if (validStores.length === 0) return null;
+
+    // If user has no store yet, return a mock default profile so pages like Settings / Store don't force-redirect to login
+    if (validStores.length === 0) {
+        return {
+            id: user.id,
+            owner_id: user.id,
+            store_name: "",
+            avatar_url: "",
+            store_address: "",
+            tax_id: "",
+            signature_url: "",
+            store_phone: "",
+            role: "owner",
+            etax_enabled: false,
+            etax_api_key: "",
+            etax_company_id: "",
+        };
+    }
 
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
     const targetStoreId = storeId || (activeCookieStoreId && validStores.some(s => s.id === activeCookieStoreId) ? activeCookieStoreId : validStores[0].id);

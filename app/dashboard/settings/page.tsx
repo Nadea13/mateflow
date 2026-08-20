@@ -11,14 +11,27 @@ export default async function SettingsPage() {
         getTeamMembers(),
     ]);
 
-    if (!authProfile || !storeProfile) {
+    if (!authProfile) {
         redirect("/login");
     }
 
     return (
         <SettingsContent
             authProfile={authProfile}
-            storeProfile={storeProfile}
+            storeProfile={storeProfile || {
+                id: authProfile.id,
+                owner_id: authProfile.id,
+                store_name: "",
+                avatar_url: "",
+                store_address: "",
+                tax_id: "",
+                signature_url: "",
+                store_phone: "",
+                role: "owner",
+                etax_enabled: false,
+                etax_api_key: "",
+                etax_company_id: "",
+            }}
             teamMembers={teamMembers}
         />
     );
