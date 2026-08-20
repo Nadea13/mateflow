@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 
 interface LogoProps {
     className?: string;
@@ -12,10 +12,10 @@ export function MateFlowIcon({ size = 32, className = "" }: { size?: number; cla
         <svg
             width={size}
             height={size}
-            viewBox="0 0 64 64"
+            viewBox="8 13 48 40"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
-            className={className}
+            className={`overflow-visible ${className}`}
         >
             <defs>
                 {/* Top / Upper Light Surfaces */}
@@ -40,8 +40,8 @@ export function MateFlowIcon({ size = 32, className = "" }: { size?: number; cla
                 </linearGradient>
             </defs>
 
-            {/* PERFECT SYMMETRIC ISOMETRIC M */}
-            <g transform="translate(0, 3)">
+            {/* PERFECT SYMMETRIC ISOMETRIC M - NO BACKGROUND, PERFECT BOUNDS */}
+            <g>
                 {/* Top surface Left & Right Bridge */}
                 <path d="M8 20L20 13L32 20L20 27L8 20Z" fill="url(#mf-top-grad)" />
                 <path d="M32 20L44 13L56 20L44 27L32 20Z" fill="url(#mf-top-grad)" />
@@ -71,12 +71,12 @@ export function MateFlowLogo({
     textClassName = "",
 }: LogoProps) {
     return (
-        <div className={`flex items-center gap-2.5 ${className}`}>
-            <div className="flex items-center justify-center shrink-0">
+        <div className={`flex items-center gap-2.5 bg-transparent ${className}`}>
+            <div className="flex items-center justify-center shrink-0 bg-transparent">
                 <MateFlowIcon size={size} />
             </div>
             {showText && (
-                <div className={`flex flex-col select-none ${textClassName}`}>
+                <div className={`flex flex-col select-none bg-transparent ${textClassName}`}>
                     <span className="text-base font-bold tracking-tight text-foreground flex items-center leading-none">
                         Mate&nbsp;<span className="text-primary font-extrabold">Flow</span>
                     </span>
