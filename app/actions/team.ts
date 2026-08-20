@@ -4,13 +4,12 @@ import { createClient } from "@/lib/supabase/server"
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 
-// 1. Generate a new Store Code for a specific role and branch
+// 1. Generate a new Store Code for a specific role
 export async function generateStoreJoinCode(formData: FormData) {
     const cookieStore = await cookies()
     const supabase = createClient(cookieStore)
 
     const role = (formData.get("role") as string) || "sales"
-    const branchId = (formData.get("branchId") as string) || null
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -38,7 +37,6 @@ export async function generateStoreJoinCode(formData: FormData) {
     const rpcRes = await supabase.rpc("generate_store_code", { 
         p_role: role,
         p_store_id: targetStoreId,
-        p_branch_id: branchId && branchId !== "all" ? branchId : null
     })
 
     if (!rpcRes.error && rpcRes.data) {
@@ -54,7 +52,6 @@ export async function generateStoreJoinCode(formData: FormData) {
             store_id: targetStoreId,
             code,
             role,
-            branch_id: branchId && branchId !== "all" ? branchId : null,
             created_by: user.id,
         })
         .select()
@@ -153,7 +150,6 @@ export async function joinStoreWithCode(formData: FormData) {
         store_id: codeRecord.store_id,
         user_id: user.id,
         role: codeRecord.role,
-        assigned_branch_id: codeRecord.branch_id,
         updated_at: new Date().toISOString(),
     }, { onConflict: "store_id, user_id" })
 
@@ -179,20 +175,20 @@ export async function updateTeamMemberRole(formData: FormData) {
         .eq("id", memberId)
 
     if (error) {
-        return { error: error.message || "Failed to update role" }
+        return { error: error.message || "Failed to update team member role" }
     }
 
     revalidatePath("/dashboard/settings")
     return { success: true }
 }
 
-// 6. Remove team member
+// 6. Remove a member from the store team
 export async function removeTeamMember(formData: FormData) {
     const cookieStore = await cookies()
     const supabase = createClient(cookieStore)
 
     const memberId = formData.get("memberId") as string
-    if (!memberId) return { error: "Member ID is required" }
+    if (!memberId) return { error: "Member ID required" }
 
     const { error } = await supabase
         .from("store_team_members")
@@ -200,7 +196,7 @@ export async function removeTeamMember(formData: FormData) {
         .eq("id", memberId)
 
     if (error) {
-        return { error: error.message || "Failed to remove member" }
+        return { error: error.message || "Failed to remove team member" }
     }
 
     revalidatePath("/dashboard/settings")

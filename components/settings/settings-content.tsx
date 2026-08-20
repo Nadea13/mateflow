@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useTranslation } from "@/lib/i18n/provider";
 import { AuthProfileCard } from "@/components/settings/auth-profile-card";
@@ -76,7 +76,7 @@ export function SettingsContent({ authProfile, storeProfile, teamMembers, branch
                         <CardDescription>{t("settings.teamDesc")}</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <TeamManagement members={teamMembers} branches={branches} />
+                        <TeamManagement members={teamMembers} />
                     </CardContent>
                 </Card>
             )}

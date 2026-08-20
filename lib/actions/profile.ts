@@ -35,28 +35,26 @@ export async function getUserProfile() {
 
     // 3. Check if user is an owner or employee in store_team_members
     let userRole = "owner";
-    let assignedBranchId: string | null = null;
 
     if (store) {
         if (store.owner_id !== user.id) {
             // User is employee in this store
             const { data: member } = await supabase
                 .from("store_team_members")
-                .select("role, assigned_branch_id")
+                .select("role")
                 .eq("store_id", store.id)
                 .eq("user_id", user.id)
                 .maybeSingle();
 
             if (member) {
                 userRole = member.role || "sales";
-                assignedBranchId = member.assigned_branch_id || null;
             }
         }
     } else {
         // Fallback check if user is invited employee to any store
         const { data: membership } = await supabase
             .from("store_team_members")
-            .select("role, assigned_branch_id, store_id")
+            .select("role, store_id")
             .eq("user_id", user.id)
             .order("created_at", { ascending: true })
             .maybeSingle();
@@ -71,7 +69,6 @@ export async function getUserProfile() {
             if (s) {
                 store = s;
                 userRole = membership.role || "sales";
-                assignedBranchId = membership.assigned_branch_id || null;
             }
         }
     }
@@ -93,12 +90,11 @@ export async function getUserProfile() {
         avatar_url: store?.avatar_url || dbUser?.avatar_url || "",
         owner_id: store?.owner_id || user.id,
         role: userRole as any,
-        assigned_branch_id: assignedBranchId,
         default_currency: store?.default_currency || "THB",
         country: store?.country || "TH",
         tax_rate: store?.tax_rate || 7,
         updated_at: store?.updated_at || new Date().toISOString(),
-    } as Profile & { assigned_branch_id?: string | null };
+    } as Profile;
 }
 
 export async function getAuthProfile() {
@@ -216,7 +212,7 @@ export async function getStores() {
     // 2. Stores where user is a team member
     const { data: memberRows } = await supabase
         .from("store_team_members")
-        .select("role, assigned_branch_id, store_id")
+        .select("role, store_id")
         .eq("user_id", user.id);
 
     const allStores: any[] = (ownedStores || []).map(s => ({
@@ -239,16 +235,10 @@ export async function getStores() {
                     .maybeSingle();
 
                 if (storeDetails) {
-                    const rawBranches = storeDetails.branchs || [];
-                    const accessibleBranches = mr.assigned_branch_id
-                        ? rawBranches.filter((b: any) => b.id === mr.assigned_branch_id)
-                        : rawBranches;
-
                     allStores.push({
                         ...storeDetails,
                         user_role: mr.role,
-                        assigned_branch_id: mr.assigned_branch_id,
-                        branches: accessibleBranches,
+                        branches: storeDetails.branchs || [],
                     });
                 }
             }
@@ -444,7 +434,6 @@ export async function getTeamMembers(storeId?: string) {
         .select(`
             id,
             role,
-            assigned_branch_id,
             created_at,
             user:users ( id, email, full_name, avatar_url )
         `)
@@ -464,7 +453,6 @@ export async function getTeamMembers(storeId?: string) {
     return data.map((tm: any) => ({
         id: tm.id,
         role: tm.role,
-        assigned_branch_id: tm.assigned_branch_id,
         email: tm.user?.email || "",
         name: tm.user?.full_name || "",
         avatar_url: tm.user?.avatar_url || "",

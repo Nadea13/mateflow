@@ -6,8 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { generateStoreJoinCode, getActiveStoreCodes, revokeStoreJoinCode, removeTeamMember, updateTeamMemberRole } from "@/app/actions/team"
 import { toast } from "sonner"
-import { Users, Copy, Trash2, KeyRound, Shield, Building2, UserPlus } from "lucide-react"
-import { Branch } from "@/types"
+import { Users, Copy, Trash2, KeyRound, Shield, UserPlus } from "lucide-react"
 
 // Types
 type Profile = {
@@ -15,28 +14,24 @@ type Profile = {
     email: string
     role: string
     owner_id: string | null
-    assigned_branch_id?: string | null
 }
 
 type StoreCode = {
     id: string
     code: string
     role: string
-    branch_id?: string | null
     created_at: string
 }
 
 interface TeamManagementProps {
     members: Profile[]
-    branches?: Branch[]
 }
 
-export function TeamManagement({ members, branches = [] }: TeamManagementProps) {
+export function TeamManagement({ members }: TeamManagementProps) {
     const [storeCodes, setStoreCodes] = useState<StoreCode[]>([])
     const [isLoadingCodes, setIsLoadingCodes] = useState(true)
     const [isGenerating, setIsGenerating] = useState(false)
     const [selectedRole, setSelectedRole] = useState("sales")
-    const [selectedBranch, setSelectedBranch] = useState("all")
 
     useEffect(() => {
         fetchStoreCodes()
@@ -57,7 +52,6 @@ export function TeamManagement({ members, branches = [] }: TeamManagementProps) 
         setIsGenerating(true)
         const formData = new FormData()
         formData.append("role", selectedRole)
-        formData.append("branchId", selectedBranch === "all" ? "" : selectedBranch)
 
         const result = await generateStoreJoinCode(formData)
         setIsGenerating(false)
@@ -129,7 +123,7 @@ export function TeamManagement({ members, branches = [] }: TeamManagementProps) 
                     </div>
                     <div>
                         <h4 className="text-sm font-semibold text-foreground">รหัสเชิญพนักงานเข้าร้าน (Store Join Codes)</h4>
-                        <p className="text-xs text-muted-foreground">สร้างรหัสเพื่อส่งให้พนักงานกดเข้าร่วมร้านค้า พร้อมกำหนดตำแหน่งและสาขาที่ดูแล</p>
+                        <p className="text-xs text-muted-foreground">สร้างรหัสเพื่อส่งให้พนักงานกดเข้าร่วมร้านค้า พร้อมกำหนดตำแหน่ง</p>
                     </div>
                 </div>
 
@@ -144,29 +138,10 @@ export function TeamManagement({ members, branches = [] }: TeamManagementProps) 
                                 <SelectItem value="sales">Sales (พนักงานขายหน้าร้าน)</SelectItem>
                                 <SelectItem value="stock_keeper">Stock Keeper (ผู้ดูแลคลังสินค้า)</SelectItem>
                                 <SelectItem value="accountant">Accountant (ฝ่ายบัญชีและการเงิน)</SelectItem>
-                                <SelectItem value="admin">Manager / Admin (ผู้จัดการสาขา)</SelectItem>
+                                <SelectItem value="admin">Manager / Admin (ผู้จัดการ)</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
-
-                    {branches.length > 0 && (
-                        <div className="flex-1 space-y-1.5">
-                            <Label htmlFor="branchSelect" className="text-xs font-semibold">สาขาที่ให้สิทธิ์เข้าถึง (Branch Scope)</Label>
-                            <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-                                <SelectTrigger id="branchSelect" className="h-9 text-xs bg-background">
-                                    <SelectValue placeholder="เลือกสาขา" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">🌐 เข้าถึงได้ทุกสาขา (All Branches)</SelectItem>
-                                    {branches.map((b) => (
-                                        <SelectItem key={b.id} value={b.id}>
-                                            📍 {b.name} ({b.code || "Branch"})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
 
                     <Button onClick={handleGenerateCode} disabled={isGenerating || isLoadingCodes} size="sm" className="h-9 text-xs gap-1.5 font-semibold w-full sm:w-auto bg-primary text-primary-foreground cursor-pointer">
                         <UserPlus className="h-3.5 w-3.5" />
@@ -220,7 +195,7 @@ export function TeamManagement({ members, branches = [] }: TeamManagementProps) 
                     </div>
                     <div>
                         <h4 className="text-sm font-semibold text-foreground">รายชื่อทีมงานในร้านค้า (Active Team Members)</h4>
-                        <p className="text-xs text-muted-foreground">จัดการรายชื่อ กำหนดสิทธิ์ตำแหน่ง และสาขาที่พนักงานสามารถเข้าถึงได้</p>
+                        <p className="text-xs text-muted-foreground">จัดการรายชื่อ และกำหนดสิทธิ์ตำแหน่งของพนักงานในร้านค้า</p>
                     </div>
                 </div>
 

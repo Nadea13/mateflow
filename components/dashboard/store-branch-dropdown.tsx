@@ -18,7 +18,6 @@ interface StoreBranchDropdownProps {
     storeName?: string;
     activeStoreId?: string;
     userRole?: string;
-    assignedBranchId?: string | null;
     stores?: any[];
     locations?: any[];
 }
@@ -27,7 +26,6 @@ export function StoreBranchDropdown({
     storeName: initialStoreName,
     activeStoreId,
     userRole = "owner",
-    assignedBranchId,
     stores = [],
     locations = [],
 }: StoreBranchDropdownProps) {
@@ -46,18 +44,13 @@ export function StoreBranchDropdown({
     const displayStoreName = initialStoreName?.trim() || currentStoreObj?.store_name || "";
     const effectiveRole = currentStoreObj?.user_role || userRole || "owner";
 
-    // Filter accessible locations based on employee assigned_branch_id
-    const accessibleLocations = assignedBranchId 
-        ? locations.filter(l => l.id === assignedBranchId)
-        : locations;
-
-    // Active selected branch (defaults to assigned or first available)
+    // Active selected branch (defaults to first available or main)
     const [selectedBranchId, setSelectedBranchId] = useState<string>(
-        assignedBranchId || accessibleLocations[0]?.id || "main"
+        locations[0]?.id || "main"
     );
 
-    const activeBranch = accessibleLocations.find((l) => l.id === selectedBranchId);
-    const branchLabel = activeBranch ? activeBranch.name : (accessibleLocations.length > 0 ? accessibleLocations[0]?.name : "สาขาหลัก");
+    const activeBranch = locations.find((l) => l.id === selectedBranchId);
+    const branchLabel = activeBranch ? activeBranch.name : (locations.length > 0 ? locations[0]?.name : "สาขาหลัก");
 
     // Format Role Thai Label
     const roleLabels: Record<string, { label: string; color: string; iconBg: string }> = {
@@ -220,13 +213,13 @@ export function StoreBranchDropdown({
                     {/* Branches List Header */}
                     <div className="px-1 flex items-center justify-between">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            สาขาที่คุณเข้าทำงาน ({accessibleLocations.length > 0 ? accessibleLocations.length : 1})
+                            สาขาและคลังสินค้า ({locations.length > 0 ? locations.length : 1})
                         </span>
                     </div>
 
                     {/* Branches Selection List */}
                     <div className="space-y-1 max-h-44 overflow-y-auto pr-0.5">
-                        {accessibleLocations.length === 0 ? (
+                        {locations.length === 0 ? (
                             <button
                                 onClick={() => {
                                     setSelectedBranchId("main");
@@ -248,7 +241,7 @@ export function StoreBranchDropdown({
                                 {selectedBranchId === "main" && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                             </button>
                         ) : (
-                            accessibleLocations.map((loc) => {
+                            locations.map((loc) => {
                                 const isSelected = selectedBranchId === loc.id;
                                 return (
                                     <button

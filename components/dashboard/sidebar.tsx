@@ -71,7 +71,6 @@ const sidebarItems = [
 
 interface SidebarProps {
     userRole?: string;
-    assignedBranchId?: string | null;
     storeName?: string;
     activeStoreId?: string;
     stores?: any[];
@@ -80,7 +79,6 @@ interface SidebarProps {
 
 export function Sidebar({ 
     userRole = "owner", 
-    assignedBranchId,
     storeName, 
     activeStoreId, 
     stores = [], 
@@ -103,7 +101,6 @@ export function Sidebar({
                         storeName={storeName}
                         activeStoreId={activeStoreId}
                         userRole={userRole}
-                        assignedBranchId={assignedBranchId}
                         stores={stores}
                         locations={locations}
                     />
