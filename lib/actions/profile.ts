@@ -219,25 +219,43 @@ export async function createNewStore(data: {
     }
 
     // 2. Create the initial branch for this brand new store
-    try {
-        const finalBranchName = data.branch_name?.trim() || `${data.store_name} (สาขาหลัก)`;
-        const finalBranchCode = data.branch_code?.trim() || "HQ-01";
-        const finalBranchType = data.branch_type || "warehouse";
-        const finalBranchAddress = data.branch_address?.trim() || data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก";
+    const finalBranchName = data.branch_name?.trim() || `${data.store_name} (สาขาหลัก)`;
+    const finalBranchCode = data.branch_code?.trim() || "HQ-01";
+    const finalBranchType = data.branch_type || "warehouse";
+    const finalBranchAddress = data.branch_address?.trim() || data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก";
 
+    const branchPayload: any = {
+        store_id: newStore.id,
+        name: finalBranchName,
+        code: finalBranchCode,
+        type: finalBranchType,
+        country: "TH",
+        address: finalBranchAddress,
+    };
+
+    // Try inserting into branchs table with store_id
+    let branchRes = await supabase.from("branchs").insert(branchPayload);
+
+    if (branchRes.error) {
+        console.warn("Retrying branch insertion into branchs with user_id/store_id fallback:", branchRes.error);
+        // Fallback: try inserting with user_id if table still has user_id
         await supabase.from("branchs").insert({
-            store_id: newStore.id,
+            ...branchPayload,
+            user_id: user.id,
+        });
+
+        // Fallback: try inserting into locations table if branchs was not yet migrated
+        await supabase.from("locations").insert({
+            user_id: user.id,
             name: finalBranchName,
             code: finalBranchCode,
             type: finalBranchType,
             country: "TH",
             address: finalBranchAddress,
         });
-    } catch (locErr) {
-        console.warn("Auto-branch creation warning:", locErr);
     }
 
-    // 3. Automatically set this newly created store as active
+    // 3. Automatically set this newly created store as active in cookie
     cookieStore.set("active_store_id", newStore.id, {
         path: "/",
         maxAge: 60 * 60 * 24 * 365,
@@ -248,6 +266,7 @@ export async function createNewStore(data: {
     revalidatePath("/dashboard/settings");
     revalidatePath("/dashboard/store");
     revalidatePath("/dashboard/catalog");
+    revalidatePath("/dashboard/inventory");
     return { success: true, store_id: newStore.id };
 }
 
