@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { Expense } from "@/types";
 
 export async function getExpenses() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { data: expenses, error } = await supabase
@@ -29,8 +29,13 @@ export async function createExpense(data: {
     description?: string;
     date: string;
     receipt_url?: string;
+    vendor_name?: string;
+    vendor_tax_id?: string;
+    wht_rate?: number;
+    wht_amount?: number;
+    input_vat?: number;
 }) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -50,12 +55,12 @@ export async function createExpense(data: {
         return { error: "Failed to create expense" };
     }
 
-    revalidatePath("/dashboard/expenses");
+    revalidatePath("/dashboard/expenses", "page");
     return { success: true };
 }
 
 export async function deleteExpense(id: string) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { error } = await supabase
@@ -68,12 +73,12 @@ export async function deleteExpense(id: string) {
         return { error: "Failed to delete expense" };
     }
 
-    revalidatePath("/dashboard/expenses");
+    revalidatePath("/dashboard/expenses", "page");
     return { success: true };
 }
 
 export async function uploadReceipt(formData: FormData) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 

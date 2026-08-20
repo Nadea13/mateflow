@@ -9,7 +9,10 @@ import {
     SelectValue
 } from "@/components/ui/select";
 
+import { useTranslation } from "@/lib/i18n/provider";
+
 export function HistoryFilter() {
+    const { t } = useTranslation();
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -29,14 +32,14 @@ export function HistoryFilter() {
     return (
         <Select value={currentType} onValueChange={onValueChange}>
             <SelectTrigger className="w-full md:w-[200px]">
-                <SelectValue placeholder="Filter by type" />
+                <SelectValue placeholder={t("history.filterAll")} />
             </SelectTrigger>
             <SelectContent>
-                <SelectItem value="all">All Activities</SelectItem>
-                <SelectItem value="bill">Bills</SelectItem>
-                <SelectItem value="product">Products</SelectItem>
-                <SelectItem value="customer">Customers</SelectItem>
-                <SelectItem value="expense">Expenses</SelectItem>
+                <SelectItem value="all">{t("history.filterAll")}</SelectItem>
+                <SelectItem value="bill">{t("history.filterBills")}</SelectItem>
+                <SelectItem value="product">{t("history.filterProducts")}</SelectItem>
+                <SelectItem value="customer">{t("history.filterCustomers")}</SelectItem>
+                <SelectItem value="expense">{t("history.filterExpenses")}</SelectItem>
             </SelectContent>
         </Select>
     );

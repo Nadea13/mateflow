@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams } from "next/navigation"
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts"
-import { Button } from "@/components/ui/button"
 import {
     Select,
     SelectContent,
@@ -10,7 +9,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { cn } from "@/lib/utils"
+import { useCurrencyStore } from "@/lib/currency/store"
+import { formatMoney, SUPPORTED_CURRENCIES } from "@/lib/currency"
 
 export function Overview({
     data,
@@ -26,6 +26,8 @@ export function Overview({
     const router = useRouter()
     const searchParams = useSearchParams()
     const currentRange = searchParams.get(queryKey) || "7d"
+    const { currency } = useCurrencyStore()
+    const currConfig = SUPPORTED_CURRENCIES[currency] || SUPPORTED_CURRENCIES.USD
 
     const ranges = [
         { label: "Daily", value: "1d" },
@@ -74,19 +76,37 @@ export function Overview({
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(value) => `฿${value}`}
+                        tickFormatter={(value) => `${currConfig.symbol}${value}`}
                     />
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.15} />
                     <Tooltip
-                        formatter={(value: any) => [`฿${Number(value).toLocaleString()}`, title]}
-                        contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                        formatter={(value: any) => [formatMoney(Number(value), currency), title]}
+                        contentStyle={{
+                            backgroundColor: "var(--card)",
+                            borderColor: "var(--border)",
+                            borderRadius: "8px",
+                            boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.3)",
+                            fontSize: "12px",
+                            color: "var(--foreground)",
+                        }}
+                        labelStyle={{
+                            color: "var(--muted-foreground)",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            marginBottom: "2px",
+                        }}
+                        itemStyle={{
+                            color: color,
+                            fontSize: "12px",
+                            fontWeight: 600,
+                        }}
                     />
                     <Line
                         type="monotone"
                         dataKey="total"
                         stroke={color}
                         strokeWidth={2}
-                        activeDot={{ r: 8 }}
+                        activeDot={{ r: 6 }}
                         dot={false}
                     />
                 </LineChart>

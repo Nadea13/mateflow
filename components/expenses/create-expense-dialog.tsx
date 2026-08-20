@@ -15,7 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createExpense, uploadReceipt } from "@/lib/actions/expenses";
 import { Plus, Upload, X, Loader2 } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -29,8 +30,22 @@ const PRESET_CATEGORIES = [
     "Other"
 ];
 
-export function CreateExpenseDialog() {
-    const [open, setOpen] = useState(false);
+interface CreateExpenseDialogProps {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    showTrigger?: boolean;
+}
+
+export function CreateExpenseDialog({
+    open: controlledOpen,
+    onOpenChange: setControlledOpen,
+    showTrigger = true
+}: CreateExpenseDialogProps) {
+    const [internalOpen, setInternalOpen] = useState(false);
+
+    const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+    const setOpen = setControlledOpen !== undefined ? setControlledOpen : setInternalOpen;
+
     const [loading, setLoading] = useState(false);
     const [title, setTitle] = useState("");
     const [amount, setAmount] = useState("");
@@ -39,9 +54,18 @@ export function CreateExpenseDialog() {
     const [description, setDescription] = useState("");
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
     const [receiptUrl, setReceiptUrl] = useState("");
+
+    // Tax fields
+    const [vendorName, setVendorName] = useState("");
+    const [vendorTaxId, setVendorTaxId] = useState("");
+    const [whtRate, setWhtRate] = useState("0");
+    const [inputVat, setInputVat] = useState("");
+
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
+    const router = useRouter();
+    const [isPending, startTransition] = useTransition();
 
     const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -80,18 +104,28 @@ export function CreateExpenseDialog() {
 
         setLoading(true);
         try {
+            const parsedAmount = parseFloat(amount);
+            const parsedWhtRate = parseFloat(whtRate);
+            const whtAmount = parsedWhtRate > 0 ? (parsedAmount * parsedWhtRate) / 100 : 0;
+            const parsedInputVat = inputVat ? parseFloat(inputVat) : 0;
+
             const result = await createExpense({
                 title,
-                amount: parseFloat(amount),
+                amount: parsedAmount,
                 category: finalCategory,
                 description,
                 date,
                 receipt_url: receiptUrl,
+                vendor_name: vendorName || undefined,
+                vendor_tax_id: vendorTaxId || undefined,
+                wht_rate: parsedWhtRate || undefined,
+                wht_amount: whtAmount || undefined,
+                input_vat: parsedInputVat || undefined,
             }) as any;
 
             if (result.success) {
                 toast({ title: "Success", description: "Expense saved successfully." });
-                setOpen(false);
+                setOpen(false); startTransition(() => { router.refresh(); });
                 // Reset form
                 setTitle("");
                 setAmount("");
@@ -100,6 +134,10 @@ export function CreateExpenseDialog() {
                 setDescription("");
                 setDate(new Date().toISOString().split("T")[0]);
                 setReceiptUrl("");
+                setVendorName("");
+                setVendorTaxId("");
+                setWhtRate("0");
+                setInputVat("");
             } else {
                 toast({ title: "Error", description: result.error, variant: "destructive" });
             }
@@ -112,15 +150,19 @@ export function CreateExpenseDialog() {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button>
-                    <Plus className="mr-2 h-4 w-4" /> Add Expense
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
+            {showTrigger && (
+                <DialogTrigger asChild>
+                    <Button size="sm" className="h-8 text-xs gap-1.5 font-medium">
+                        <Plus className="h-3.5 w-3.5" /> Add Expense
+                    </Button>
+                </DialogTrigger>
+            )}
+            <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>New Expense</DialogTitle>
-                    <DialogDescription>Record your expenses.</DialogDescription>
+                    <DialogTitle>Record New Expense</DialogTitle>
+                    <DialogDescription>
+                        Log operating costs, VAT receipts, and withholding tax records.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="grid gap-4 py-4">
@@ -180,6 +222,70 @@ export function CreateExpenseDialog() {
                         )}
                     </div>
 
+                    <div className="border-t pt-4 mt-2">
+                        <h4 className="text-sm font-medium mb-3">Tax Information (Optional)</h4>
+                        <div className="grid grid-cols-2 gap-4 mb-3">
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="vendorName">Vendor Name</Label>
+                                <Input
+                                    id="vendorName"
+                                    value={vendorName}
+                                    onChange={(e) => setVendorName(e.target.value)}
+                                    placeholder="Company Ltd."
+                                />
+                            </div>
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="vendorTaxId">Tax ID</Label>
+                                <Input
+                                    id="vendorTaxId"
+                                    value={vendorTaxId}
+                                    onChange={(e) => setVendorTaxId(e.target.value)}
+                                    placeholder="13-digit ID"
+                                />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 mb-3">
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="whtRate">WHT (50 Tawi)</Label>
+                                <select
+                                    id="whtRate"
+                                    value={whtRate}
+                                    onChange={(e) => setWhtRate(e.target.value)}
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                >
+                                    <option value="0">None (0%)</option>
+                                    <option value="1">1% (Transportation)</option>
+                                    <option value="2">2% (Advertising)</option>
+                                    <option value="3">3% (Service/Contractor)</option>
+                                    <option value="5">5% (Rent/Prizes)</option>
+                                </select>
+                            </div>
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="inputVat">Input VAT (PP.30)</Label>
+                                <div className="relative">
+                                    <Input
+                                        id="inputVat"
+                                        type="number"
+                                        min={0}
+                                        step="0.01"
+                                        value={inputVat}
+                                        onChange={(e) => setInputVat(e.target.value)}
+                                        placeholder="0.00"
+                                    />
+                                    {amount && !inputVat && (
+                                        <button
+                                            type="button"
+                                            className="absolute right-2 top-2 text-xs text-blue-500 hover:text-blue-700 font-medium"
+                                            onClick={() => setInputVat((parseFloat(amount) * 0.07).toFixed(2))}
+                                        >
+                                            Calc 7%
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid gap-1.5">
                         <Label>Receipt (Optional)</Label>
                         {receiptUrl ? (
@@ -235,7 +341,10 @@ export function CreateExpenseDialog() {
                 </div>
 
                 <DialogFooter>
-                    <Button onClick={handleSubmit} disabled={loading || uploading}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
+                        Cancel
+                    </Button>
+                    <Button size="sm" onClick={handleSubmit} disabled={loading || uploading}>
                         {loading ? "Saving..." : "Save Expense"}
                     </Button>
                 </DialogFooter>

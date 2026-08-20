@@ -5,12 +5,14 @@ import {
     User,
     CreditCard
 } from "lucide-react"
+import { useTranslation } from "@/lib/i18n/provider"
 
 export function RecentActivity({ data }: { data: any[] }) {
+    const { t } = useTranslation();
     if (!data || data.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <p>No recent activity</p>
+            <div className="flex flex-col items-center justify-center py-8 text-xs text-muted-foreground">
+                <p>{t("common.noData")}</p>
             </div>
         )
     }

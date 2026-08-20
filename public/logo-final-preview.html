@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mate Flow - Final Logo Design Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #090D16;
+      color: #F8FAFC;
+      padding: 48px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 960px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+    .header {
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      background: rgba(56, 189, 248, 0.1);
+      color: #38BDF8;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #FFFFFF;
+    }
+    p.subtitle {
+      color: #94A3B8;
+      font-size: 15px;
+      margin-top: 6px;
+    }
+    .showcase-card {
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+    }
+    .preview-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 768px) {
+      .preview-row {
+        grid-template-columns: 1fr;
+      }
+    }
+    .stage-dark {
+      background: radial-gradient(circle at center, #111B2E 0%, #090D16 100%);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 18px;
+      padding: 48px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      position: relative;
+    }
+    .stage-light {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 18px;
+      padding: 48px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      position: relative;
+    }
+    .stage-label {
+      position: absolute;
+      top: 14px;
+      left: 18px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      opacity: 0.6;
+    }
+    .stage-dark .stage-label { color: #94A3B8; }
+    .stage-light .stage-label { color: #64748B; }
+
+    .grid-icons {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .icon-box {
+      background: #090D16;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .icon-box span {
+      font-size: 12px;
+      color: #94A3B8;
+      font-weight: 600;
+    }
+    .features-list {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 8px;
+    }
+    .feature-item {
+      background: #0B0F19;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .feature-item h3 {
+      font-size: 14px;
+      color: #38BDF8;
+      margin-bottom: 4px;
+    }
+    .feature-item p {
+      font-size: 12px;
+      color: #94A3B8;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <div class="badge">Final Vector Concept</div>
+      <h1>Mate Flow — Symmetrical Isometric Identity</h1>
+      <p class="subtitle">ปรับปรุงสัดส่วนให้สมมาตร 100% (Mathematical Symmetry) พร้อมปรับชุดสีเข้ากับ Theme สีระบบ (#38BDF8 Primary)</p>
+    </div>
+
+    <div class="showcase-card">
+      
+      <!-- Primary Horizontal Lockup Previews -->
+      <div class="preview-row">
+        
+        <!-- Dark Mode Stage -->
+        <div class="stage-dark">
+          <span class="stage-label">Dark Theme (In-App)</span>
+          <svg width="280" height="64" viewBox="0 0 280 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <!-- Top / Light Faces -->
+              <linearGradient id="topGrad" x1="12" y1="12" x2="52" y2="36" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#7DD3FC"/>
+                <stop offset="1" stop-color="#38BDF8"/>
+              </linearGradient>
+              <!-- Left Faces -->
+              <linearGradient id="leftGrad" x1="12" y1="20" x2="32" y2="52" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#0284C7"/>
+                <stop offset="1" stop-color="#0369A1"/>
+              </linearGradient>
+              <!-- Right Faces -->
+              <linearGradient id="rightGrad" x1="32" y1="20" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#0369A1"/>
+                <stop offset="1" stop-color="#075985"/>
+              </linearGradient>
+              <!-- Center Core Highlight -->
+              <linearGradient id="coreGrad" x1="20" y1="28" x2="44" y2="48" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#38BDF8"/>
+                <stop offset="1" stop-color="#0284C7"/>
+              </linearGradient>
+            </defs>
+
+            <!-- PERFECT SYMMETRIC ISOMETRIC M -->
+            <g transform="translate(6, 4)">
+              <!-- Upper Chevron (M Top Bridge) -->
+              <!-- Top surface Left -->
+              <path d="M8 20L20 13L32 20L20 27L8 20Z" fill="url(#topGrad)"/>
+              <!-- Top surface Right -->
+              <path d="M32 20L44 13L56 20L44 27L32 20Z" fill="url(#topGrad)"/>
+              
+              <!-- Left Outer Pillar Drop -->
+              <path d="M8 20L20 27V42L8 35V20Z" fill="url(#leftGrad)"/>
+              <!-- Right Outer Pillar Drop -->
+              <path d="M44 27L56 20V35L44 42V27Z" fill="url(#rightGrad)"/>
+              
+              <!-- Center Inner Valley Left -->
+              <path d="M20 27L32 20V34L20 41V27Z" fill="url(#rightGrad)" opacity="0.9"/>
+              <!-- Center Inner Valley Right -->
+              <path d="M32 20L44 27V41L32 34V20Z" fill="url(#leftGrad)" opacity="0.9"/>
+
+              <!-- Lower Isometric Floating Layer (Flow Base) -->
+              <path d="M20 41L32 34L44 41L32 48L20 41Z" fill="url(#coreGrad)"/>
+              <path d="M20 41L32 48V53L20 46V41Z" fill="url(#leftGrad)"/>
+              <path d="M32 48L44 41V46L32 53V48Z" fill="url(#rightGrad)"/>
+            </g>
+
+            <!-- Wordmark Typography -->
+            <text x="78" y="39" font-family="'Plus Jakarta Sans', sans-serif" font-size="26" font-weight="700" fill="#FFFFFF" letter-spacing="-0.03em">
+              Mate <tspan fill="#38BDF8" font-weight="800">Flow</tspan>
+            </text>
+          </svg>
+        </div>
+
+        <!-- Light Mode Stage -->
+        <div class="stage-light">
+          <span class="stage-label">Light Theme</span>
+          <svg width="280" height="64" viewBox="0 0 280 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <g transform="translate(6, 4)">
+              <!-- Top surface Left & Right -->
+              <path d="M8 20L20 13L32 20L20 27L8 20Z" fill="#38BDF8"/>
+              <path d="M32 20L44 13L56 20L44 27L32 20Z" fill="#38BDF8"/>
+              
+              <!-- Outer Pillars -->
+              <path d="M8 20L20 27V42L8 35V20Z" fill="#0284C7"/>
+              <path d="M44 27L56 20V35L44 42V27Z" fill="#0369A1"/>
+              
+              <!-- Inner Valley -->
+              <path d="M20 27L32 20V34L20 41V27Z" fill="#0369A1"/>
+              <path d="M32 20L44 27V41L32 34V20Z" fill="#0284C7"/>
+
+              <!-- Lower Base -->
+              <path d="M20 41L32 34L44 41L32 48L20 41Z" fill="#0EA5E9"/>
+              <path d="M20 41L32 48V53L20 46V41Z" fill="#0284C7"/>
+              <path d="M32 48L44 41V46L32 53V48Z" fill="#0369A1"/>
+            </g>
+
+            <text x="78" y="39" font-family="'Plus Jakarta Sans', sans-serif" font-size="26" font-weight="700" fill="#0F172A" letter-spacing="-0.03em">
+              Mate <tspan fill="#0284C7" font-weight="800">Flow</tspan>
+            </text>
+          </svg>
+        </div>
+
+      </div>
+
+      <!-- App Icon Variations -->
+      <div>
+        <h3 style="font-size: 15px; margin-bottom: 14px; color: #E2E8F0;">Standalone App Icons / Favicon Mockups</h3>
+        <div class="grid-icons">
+          
+          <div class="icon-box">
+            <svg width="48" height="48" viewBox="0 0 64 64" fill="none">
+              <rect width="64" height="64" rx="16" fill="#1E293B"/>
+              <g transform="translate(0, 4)">
+                <path d="M8 20L20 13L32 20L20 27L8 20Z" fill="#7DD3FC"/>
+                <path d="M32 20L44 13L56 20L44 27L32 20Z" fill="#7DD3FC"/>
+                <path d="M8 20L20 27V42L8 35V20Z" fill="#0284C7"/>
+                <path d="M44 27L56 20V35L44 42V27Z" fill="#0369A1"/>
+                <path d="M20 27L32 20V34L20 41V27Z" fill="#0369A1"/>
+                <path d="M32 20L44 27V41L32 34V20Z" fill="#0284C7"/>
+                <path d="M20 41L32 34L44 41L32 48L20 41Z" fill="#38BDF8"/>
+                <path d="M20 41L32 48V53L20 46V41Z" fill="#0284C7"/>
+                <path d="M32 48L44 41V46L32 53V48Z" fill="#0369A1"/>
+              </g>
+            </svg>
+            <span>Squircle Icon</span>
+          </div>
+
+          <div class="icon-box">
+            <svg width="48" height="48" viewBox="0 0 64 64" fill="none">
+              <rect width="64" height="64" rx="16" fill="#0284C7"/>
+              <g transform="translate(0, 4)">
+                <path d="M8 20L20 13L32 20L20 27L8 20Z" fill="#FFFFFF"/>
+                <path d="M32 20L44 13L56 20L44 27L32 20Z" fill="#FFFFFF"/>
+                <path d="M8 20L20 27V42L8 35V20Z" fill="#E0F2FE"/>
+                <path d="M44 27L56 20V35L44 42V27Z" fill="#BAE6FD"/>
+                <path d="M20 27L32 20V34L20 41V27Z" fill="#BAE6FD"/>
+                <path d="M32 20L44 27V41L32 34V20Z" fill="#E0F2FE"/>
+                <path d="M20 41L32 34L44 41L32 48L20 41Z" fill="#FFFFFF"/>
+                <path d="M20 41L32 48V53L20 46V41Z" fill="#E0F2FE"/>
+                <path d="M32 48L44 41V46L32 53V48Z" fill="#BAE6FD"/>
+              </g>
+            </svg>
+            <span>Brand Solid</span>
+          </div>
+
+          <div class="icon-box">
+            <svg width="48" height="48" viewBox="0 0 64 64" fill="none">
+              <circle cx="32" cy="32" r="32" fill="#0F172A"/>
+              <g transform="translate(0, 4)">
+                <path d="M8 20L20 13L32 20L20 27L8 20Z" fill="#7DD3FC"/>
+                <path d="M32 20L44 13L56 20L44 27L32 20Z" fill="#7DD3FC"/>
+                <path d="M8 20L20 27V42L8 35V20Z" fill="#0284C7"/>
+                <path d="M44 27L56 20V35L44 42V27Z" fill="#0369A1"/>
+                <path d="M20 27L32 20V34L20 41V27Z" fill="#0369A1"/>
+                <path d="M32 20L44 27V41L32 34V20Z" fill="#0284C7"/>
+                <path d="M20 41L32 34L44 41L32 48L20 41Z" fill="#38BDF8"/>
+                <path d="M20 41L32 48V53L20 46V41Z" fill="#0284C7"/>
+                <path d="M32 48L44 41V46L32 53V48Z" fill="#0369A1"/>
+              </g>
+            </svg>
+            <span>Circle Badge</span>
+          </div>
+
+          <div class="icon-box">
+            <svg width="48" height="48" viewBox="0 0 64 64" fill="none">
+              <g transform="translate(0, 4)">
+                <path d="M8 20L20 13L32 20L20 27L8 20Z" fill="#7DD3FC"/>
+                <path d="M32 20L44 13L56 20L44 27L32 20Z" fill="#7DD3FC"/>
+                <path d="M8 20L20 27V42L8 35V20Z" fill="#0284C7"/>
+                <path d="M44 27L56 20V35L44 42V27Z" fill="#0369A1"/>
+                <path d="M20 27L32 20V34L20 41V27Z" fill="#0369A1"/>
+                <path d="M32 20L44 27V41L32 34V20Z" fill="#0284C7"/>
+                <path d="M20 41L32 34L44 41L32 48L20 41Z" fill="#38BDF8"/>
+                <path d="M20 41L32 48V53L20 46V41Z" fill="#0284C7"/>
+                <path d="M32 48L44 41V46L32 53V48Z" fill="#0369A1"/>
+              </g>
+            </svg>
+            <span>Transparent</span>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Specs list -->
+      <div class="features-list">
+        <div class="feature-item">
+          <h3>1. Perfect Isometric Symmetry</h3>
+          <p>องศา Isometric 30° สมมาตรซ้าย-ขวาเท่ากันแบบ 1:1 แก้ปัญหาด้านขวาไม่บาลานซ์</p>
+        </div>
+        <div class="feature-item">
+          <h3>2. System Theme Match</h3>
+          <p>คุมโทนสีตามระบบ (#38BDF8 Sky Blue + #0284C7 Slate Blue) กลมกลืนกับ Dashboard</p>
+        </div>
+        <div class="feature-item">
+          <h3>3. Two-word Branding</h3>
+          <p>Typography "Mate Flow" ตัวหนาคมชัด แยก 2 คำชัดเจน อ่านง่ายทั้งหน้าจอเล็กและใหญ่</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>

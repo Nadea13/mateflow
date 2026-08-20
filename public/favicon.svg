@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="mf-fav-top" x1="8" y1="13" x2="56" y2="27" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7DD3FC"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+    <linearGradient id="mf-fav-left" x1="8" y1="20" x2="32" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0284C7"/>
+      <stop offset="1" stop-color="#0369A1"/>
+    </linearGradient>
+    <linearGradient id="mf-fav-right" x1="32" y1="20" x2="56" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0369A1"/>
+      <stop offset="1" stop-color="#075985"/>
+    </linearGradient>
+    <linearGradient id="mf-fav-core" x1="20" y1="34" x2="44" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#0284C7"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#090D16"/>
+  <g transform="translate(0, 3)">
+    <!-- Top bridge surfaces -->
+    <path d="M8 20L20 13L32 20L20 27L8 20Z" fill="url(#mf-fav-top)"/>
+    <path d="M32 20L44 13L56 20L44 27L32 20Z" fill="url(#mf-fav-top)"/>
+    <!-- Outer Pillars -->
+    <path d="M8 20L20 27V42L8 35V20Z" fill="url(#mf-fav-left)"/>
+    <path d="M44 27L56 20V35L44 42V27Z" fill="url(#mf-fav-right)"/>
+    <!-- Inner Valleys -->
+    <path d="M20 27L32 20V34L20 41V27Z" fill="url(#mf-fav-right)" opacity="0.9"/>
+    <path d="M32 20L44 27V41L32 34V20Z" fill="url(#mf-fav-left)" opacity="0.9"/>
+    <!-- Lower Base -->
+    <path d="M20 41L32 34L44 41L32 48L20 41Z" fill="url(#mf-fav-core)"/>
+    <path d="M20 41L32 48V53L20 46V41Z" fill="url(#mf-fav-left)"/>
+    <path d="M32 48L44 41V46L32 53V48Z" fill="url(#mf-fav-right)"/>
+  </g>
+</svg>

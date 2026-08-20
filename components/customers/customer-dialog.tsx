@@ -16,7 +16,8 @@ import { Textarea } from "@/components/ui/textarea"; // Assuming you have this, 
 import { createCustomer, updateCustomer } from "@/lib/actions/customers";
 import { Customer } from "@/types";
 import { Plus } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 
 interface CustomerDialogProps {
@@ -29,6 +30,8 @@ export function CustomerDialog({ customerToEdit, open: controlledOpen, onOpenCha
     const [internalOpen, setInternalOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
+    const router = useRouter();
+    const [isPending, startTransition] = useTransition();
 
     const isControlled = controlledOpen !== undefined;
     const open = isControlled ? controlledOpen : internalOpen;
@@ -62,7 +65,7 @@ export function CustomerDialog({ customerToEdit, open: controlledOpen, onOpenCha
                     title: isEditMode ? "Customer Updated" : "Customer Created",
                     description: `Successfully ${isEditMode ? "updated" : "added"} ${data.name}.`,
                 });
-                setOpen(false);
+                setOpen(false); startTransition(() => { router.refresh(); });
             } else {
                 toast({
                     title: "Error",
@@ -85,44 +88,49 @@ export function CustomerDialog({ customerToEdit, open: controlledOpen, onOpenCha
         <Dialog open={open} onOpenChange={setOpen}>
             {!isControlled && (
                 <DialogTrigger asChild>
-                    <Button>
-                        <Plus className="mr-2 h-4 w-4" /> Add Customer
+                    <Button size="sm" className="h-8 text-xs gap-1.5 font-medium">
+                        <Plus className="h-3.5 w-3.5" /> Add Customer
                     </Button>
                 </DialogTrigger>
             )}
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[480px]">
                 <DialogHeader>
                     <DialogTitle>{isEditMode ? "Edit Customer" : "Add Customer"}</DialogTitle>
                     <DialogDescription>
-                        {isEditMode ? "Update customer details." : "Add a new customer to your CRM."}
+                        {isEditMode ? "Update customer details in directory." : "Add a new customer to your contact directory."}
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit}>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid w-full max-w-sm items-center gap-1.5">
-                            <Label htmlFor="name">Name</Label>
+                    <div className="grid gap-3 py-3 text-xs">
+                        <div className="grid gap-1">
+                            <Label htmlFor="name" className="text-xs">Name *</Label>
                             <Input id="name" name="name" defaultValue={customerToEdit?.name} required />
                         </div>
-                        <div className="grid w-full max-w-sm items-center gap-1.5">
-                            <Label htmlFor="phone">Phone</Label>
-                            <Input id="phone" name="phone" defaultValue={customerToEdit?.phone} />
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="grid gap-1">
+                                <Label htmlFor="phone" className="text-xs">Phone</Label>
+                                <Input id="phone" name="phone" defaultValue={customerToEdit?.phone} />
+                            </div>
+                            <div className="grid gap-1">
+                                <Label htmlFor="email" className="text-xs">Email</Label>
+                                <Input id="email" name="email" type="email" defaultValue={customerToEdit?.email} />
+                            </div>
                         </div>
-                        <div className="grid w-full max-w-sm items-center gap-1.5">
-                            <Label htmlFor="email">Email</Label>
-                            <Input id="email" name="email" type="email" defaultValue={customerToEdit?.email} />
-                        </div>
-                        <div className="grid w-full max-w-sm items-center gap-1.5">
-                            <Label htmlFor="line_id">Line ID</Label>
+                        <div className="grid gap-1">
+                            <Label htmlFor="line_id" className="text-xs">Line ID</Label>
                             <Input id="line_id" name="line_id" defaultValue={customerToEdit?.line_id} />
                         </div>
-                        <div className="grid w-full max-w-sm items-center gap-1.5">
-                            <Label htmlFor="address">Address</Label>
-                            <Textarea id="address" name="address" defaultValue={customerToEdit?.address} />
+                        <div className="grid gap-1">
+                            <Label htmlFor="address" className="text-xs">Address</Label>
+                            <Textarea id="address" name="address" defaultValue={customerToEdit?.address} className="text-xs" />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button type="submit" disabled={loading}>
-                            {loading ? "Saving..." : "Save"}
+                        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" size="sm" disabled={loading}>
+                            {loading ? "Saving..." : "Save Customer"}
                         </Button>
                     </DialogFooter>
                 </form>

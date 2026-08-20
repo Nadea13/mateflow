@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useTransition, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { updateProfile, uploadAvatar, uploadSignature } from "@/lib/actions/profile";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Save, Store, Upload, Phone } from "lucide-react";
+import { useTranslation } from "@/lib/i18n/provider";
 
 interface StoreFormProps {
     store: {
@@ -24,18 +26,32 @@ interface StoreFormProps {
 }
 
 export function StoreForm({ store }: StoreFormProps) {
-    const [storeName, setStoreName] = useState(store.store_name);
-    const [storeAddress, setStoreAddress] = useState(store.store_address);
-    const [taxId, setTaxId] = useState(store.tax_id);
-    const [avatarUrl, setAvatarUrl] = useState(store.avatar_url);
-    const [signatureUrl, setSignatureUrl] = useState(store.signature_url);
-    const [storePhone, setStorePhone] = useState(store.store_phone);
+    const { t } = useTranslation();
+    const [storeName, setStoreName] = useState(store?.store_name || "");
+    const [storeAddress, setStoreAddress] = useState(store?.store_address || "");
+    const [taxId, setTaxId] = useState(store?.tax_id || "");
+    const [avatarUrl, setAvatarUrl] = useState(store?.avatar_url || "");
+    const [signatureUrl, setSignatureUrl] = useState(store?.signature_url || "");
+    const [storePhone, setStorePhone] = useState(store?.store_phone || "");
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [uploadingSig, setUploadingSig] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const sigInputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
+    const router = useRouter();
+    const [isPending, startTransition] = useTransition();
+
+    useEffect(() => {
+        if (store) {
+            setStoreName(store.store_name || "");
+            setStoreAddress(store.store_address || "");
+            setTaxId(store.tax_id || "");
+            setAvatarUrl(store.avatar_url || "");
+            setSignatureUrl(store.signature_url || "");
+            setStorePhone(store.store_phone || "");
+        }
+    }, [store]);
 
     const handleSave = async () => {
         setSaving(true);
@@ -48,6 +64,9 @@ export function StoreForm({ store }: StoreFormProps) {
             }) as any;
             if (result.success) {
                 toast({ title: "Saved", description: "Store profile updated." });
+                startTransition(() => {
+                    router.refresh();
+                });
             } else {
                 toast({ title: "Error", description: result.error, variant: "destructive" });
             }
@@ -118,7 +137,7 @@ export function StoreForm({ store }: StoreFormProps) {
         <Card className="max-w-2xl">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    Store Profile
+                    {t("settings.storeInfo")}
                 </CardTitle>
                 <CardDescription>Store information will appear on quotations and receipts.</CardDescription>
             </CardHeader>
@@ -157,7 +176,7 @@ export function StoreForm({ store }: StoreFormProps) {
 
                 {/* Store Name */}
                 <div className="grid gap-1.5">
-                    <Label htmlFor="store_name">Store Name</Label>
+                    <Label htmlFor="store_name">{t("settings.storeName")}</Label>
                     <Input
                         id="store_name"
                         value={storeName}
@@ -168,7 +187,7 @@ export function StoreForm({ store }: StoreFormProps) {
 
                 {/* Store Phone */}
                 <div className="grid gap-1.5">
-                    <Label htmlFor="store_phone">Phone Number</Label>
+                    <Label htmlFor="store_phone">{t("settings.storePhone")}</Label>
                     <Input
                         id="store_phone"
                         value={storePhone}
@@ -179,7 +198,7 @@ export function StoreForm({ store }: StoreFormProps) {
 
                 {/* Store Address */}
                 <div className="grid gap-1.5">
-                    <Label htmlFor="store_address">Address</Label>
+                    <Label htmlFor="store_address">{t("settings.storeAddress")}</Label>
                     <Textarea
                         id="store_address"
                         value={storeAddress}
@@ -191,7 +210,7 @@ export function StoreForm({ store }: StoreFormProps) {
 
                 {/* Tax ID */}
                 <div className="grid gap-1.5">
-                    <Label htmlFor="tax_id">Tax ID</Label>
+                    <Label htmlFor="tax_id">{t("settings.taxId")}</Label>
                     <Input
                         id="tax_id"
                         value={taxId}
@@ -203,7 +222,7 @@ export function StoreForm({ store }: StoreFormProps) {
 
                 {/* Signature / Stamp Upload */}
                 <div className="grid gap-1.5">
-                    <Label>Signature / Stamp</Label>
+                    <Label>{t("settings.signature")}</Label>
                     <p className="text-xs text-muted-foreground">Appears on documents (Transparent PNG recommended)</p>
                     {signatureUrl ? (
                         <div className="relative group w-fit">
@@ -243,9 +262,9 @@ export function StoreForm({ store }: StoreFormProps) {
                     />
                 </div>
 
-                <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
-                    <Save className="mr-2 h-4 w-4" />
-                    {saving ? "Saving..." : "Save"}
+                <Button onClick={handleSave} size="sm" disabled={saving} className="h-8 text-xs gap-1.5 font-medium w-full sm:w-auto">
+                    <Save className="h-3.5 w-3.5" />
+                    {saving ? "Saving..." : "Save Store Details"}
                 </Button>
             </CardContent>
         </Card>

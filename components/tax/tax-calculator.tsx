@@ -8,6 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { calculateTax, getYearlyTaxStats, TaxStats } from "@/lib/actions/tax";
 import { Button } from "@/components/ui/button";
 import { Calculator } from "lucide-react";
+import { ETaxSettings } from "@/components/tax/e-tax-settings";
+import { WhtReport } from "@/components/tax/wht-report";
+import { VatReport } from "@/components/tax/vat-report";
+import { AccountingExport } from "@/components/tax/accounting-export";
+import { useTranslation } from "@/lib/i18n/provider";
 
 function fmt(n: number) {
     return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -18,6 +23,7 @@ interface TaxCalculatorProps {
 }
 
 export function TaxCalculator({ initialStats }: TaxCalculatorProps) {
+    const { t } = useTranslation();
     const [deductions, setDeductions] = useState(60000); // Standard personal allowance
     const [stats, setStats] = useState<TaxStats | null>(initialStats || null);
     const [taxData, setTaxData] = useState<any>(null);
@@ -115,10 +121,12 @@ export function TaxCalculator({ initialStats }: TaxCalculatorProps) {
             </div>
 
             <Tabs defaultValue="income-tax" className="space-y-4">
-                <TabsList className="w-full grid grid-cols-3">
-                    <TabsTrigger value="income-tax" className="text-xs sm:text-sm">Income Tax</TabsTrigger>
-                    <TabsTrigger value="vat" className="text-xs sm:text-sm">VAT</TabsTrigger>
-                    <TabsTrigger value="wht" className="text-xs sm:text-sm">WHT</TabsTrigger>
+                <TabsList className="flex-wrap h-auto gap-1">
+                    <TabsTrigger value="income-tax">Income Tax</TabsTrigger>
+                    <TabsTrigger value="vat">VAT (PP.30)</TabsTrigger>
+                    <TabsTrigger value="wht">WHT (50 Tawi)</TabsTrigger>
+                    <TabsTrigger value="e-tax">E-Tax</TabsTrigger>
+                    <TabsTrigger value="export">Export Data</TabsTrigger>
                 </TabsList>
 
                 {/* INCOME TAX TAB */}
@@ -267,6 +275,10 @@ export function TaxCalculator({ initialStats }: TaxCalculatorProps) {
                             </CardContent>
                         </Card>
                     </div>
+
+                    <div className="mt-8">
+                        <VatReport />
+                    </div>
                 </TabsContent>
 
                 {/* WITHHOLDING TAX TAB */}
@@ -332,6 +344,20 @@ export function TaxCalculator({ initialStats }: TaxCalculatorProps) {
                             </div>
                         </CardContent>
                     </Card>
+
+                    <div className="mt-8">
+                        <WhtReport />
+                    </div>
+                </TabsContent>
+
+                {/* E-TAX TAB */}
+                <TabsContent value="e-tax" className="space-y-4">
+                    <ETaxSettings />
+                </TabsContent>
+
+                {/* EXPORT TAB */}
+                <TabsContent value="export" className="space-y-4">
+                    <AccountingExport />
                 </TabsContent>
             </Tabs>
         </div>

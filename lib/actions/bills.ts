@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { Bill, BillItem } from "@/types";
 
 export async function getBills() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { data: bills, error } = await supabase
@@ -29,7 +29,7 @@ export async function getBills() {
 }
 
 export async function getBill(id: string) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     // Fetch bill
@@ -87,7 +87,7 @@ interface CreateBillInput {
 }
 
 export async function createBill(data: CreateBillInput) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -178,7 +178,7 @@ export async function createBill(data: CreateBillInput) {
 }
 
 export async function updateBillStatus(id: string, status: string) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { error } = await supabase
@@ -196,7 +196,7 @@ export async function updateBillStatus(id: string, status: string) {
 }
 
 export async function deleteBill(id: string) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { error } = await supabase

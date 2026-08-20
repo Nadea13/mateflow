@@ -166,7 +166,7 @@ async function getChartData(supabase: any, range: string, type: "sales" | "profi
 }
 
 export async function getDashboardStats(salesRange: string = "7d", profitRange: string = "7d") {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const today = new Date();
@@ -242,7 +242,7 @@ export async function getDashboardStats(salesRange: string = "7d", profitRange: 
 }
 
 export async function getInventorySummary() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     // Get products with low stock first, limit to top 20 for the chat context
@@ -261,7 +261,7 @@ export async function getInventorySummary() {
 }
 
 export async function getRecentActivity() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     // Fetch latest from each table

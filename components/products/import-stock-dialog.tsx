@@ -57,11 +57,11 @@ export function ImportStockDialog() {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline">
-                    <Upload className="mr-2 h-4 w-4" /> Import
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 font-medium">
+                    <Upload className="h-3.5 w-3.5 text-muted-foreground" /> Import
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[480px]">
                 <DialogHeader>
                     <DialogTitle>Import Stock</DialogTitle>
                     <DialogDescription>
@@ -69,15 +69,18 @@ export function ImportStockDialog() {
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit}>
-                    <div className="grid gap-4 py-4">
+                    <div className="grid gap-3 py-3 text-xs">
                         <div className="grid w-full max-w-sm items-center gap-1.5">
-                            <Label htmlFor="file">CSV File</Label>
+                            <Label htmlFor="file" className="text-xs">CSV File</Label>
                             <Input id="file" name="file" type="file" accept=".csv,image/*" required />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button type="submit" disabled={loading}>
-                            {loading ? "Importing..." : "Import"}
+                        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" size="sm" disabled={loading}>
+                            {loading ? "Importing..." : "Import Stock"}
                         </Button>
                     </DialogFooter>
                 </form>

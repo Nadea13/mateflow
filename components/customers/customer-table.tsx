@@ -16,18 +16,21 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Trash, Edit } from "lucide-react";
+import { MoreHorizontal, Trash, Edit, Users } from "lucide-react";
 import { Customer } from "@/types";
 import { deleteCustomer } from "@/lib/actions/customers";
 import { useToast } from "@/hooks/use-toast";
 import { CustomerDialog } from "./customer-dialog";
 import { useState } from "react";
+import { EmptyState } from "@/components/shared/empty-state";
+import { useTranslation } from "@/lib/i18n/provider";
 
 interface CustomerTableProps {
     customers: Customer[];
 }
 
 export function CustomerTable({ customers }: CustomerTableProps) {
+    const { t } = useTranslation();
     const { toast } = useToast();
     const [editingCustomer, setEditingCustomer] = useState<Customer | undefined>(undefined);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -70,20 +73,25 @@ export function CustomerTable({ customers }: CustomerTableProps) {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="sticky left-0 z-20 bg-background">No.</TableHead>
-                            <TableHead className="sticky left-[40px] z-20 bg-background">Name</TableHead>
-                            <TableHead>Phone</TableHead>
-                            <TableHead>Email</TableHead>
+                            <TableHead className="sticky left-0 z-20 bg-muted/80">{t("registry.table.no")}</TableHead>
+                            <TableHead className="sticky left-[40px] z-20 bg-muted/80">{t("registry.table.name")}</TableHead>
+                            <TableHead>{t("registry.table.phone")}</TableHead>
+                            <TableHead>{t("registry.table.email")}</TableHead>
                             <TableHead>Line ID</TableHead>
-                            <TableHead>Address</TableHead>
+                            <TableHead>{t("registry.table.address")}</TableHead>
                             <TableHead className="w-[70px]"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {customers.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center">
-                                    No customers found.
+                                <TableCell colSpan={7} className="p-0 border-0">
+                                    <EmptyState
+                                        icon={Users}
+                                        title={t("registry.table.noCustomers")}
+                                        description={t("registry.table.noCustomersDesc")}
+                                        className="border-0 my-0 rounded-none bg-transparent"
+                                    />
                                 </TableCell>
                             </TableRow>
                         ) : (

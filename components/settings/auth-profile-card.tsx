@@ -1,6 +1,9 @@
+"use client";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Mail, User, Calendar, Shield } from "lucide-react";
+import { useTranslation } from "@/lib/i18n/provider";
 
 interface AuthProfileCardProps {
     profile: {
@@ -13,6 +16,8 @@ interface AuthProfileCardProps {
 }
 
 export function AuthProfileCard({ profile }: AuthProfileCardProps) {
+    const { t, locale } = useTranslation();
+
     const initials = profile.display_name
         ? profile.display_name.charAt(0).toUpperCase()
         : profile.email.charAt(0).toUpperCase();
@@ -26,7 +31,7 @@ export function AuthProfileCard({ profile }: AuthProfileCardProps) {
 
     const formatDate = (d: string) => {
         if (!d) return "-";
-        return new Date(d).toLocaleDateString("en-US", {
+        return new Date(d).toLocaleDateString(locale === "th" ? "th-TH" : "en-US", {
             year: "numeric",
             month: "long",
             day: "numeric",
@@ -37,9 +42,9 @@ export function AuthProfileCard({ profile }: AuthProfileCardProps) {
         <Card className="max-w-2xl">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    Profile
+                    {t("settings.profile")}
                 </CardTitle>
-                <CardDescription>User account information from Supabase Auth</CardDescription>
+                <CardDescription>{t("settings.profileDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="flex items-center gap-6 mb-6">
@@ -60,17 +65,17 @@ export function AuthProfileCard({ profile }: AuthProfileCardProps) {
                 <div className="space-y-3">
                     <div className="flex items-center gap-3 text-sm">
                         <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-muted-foreground w-24">Email</span>
+                        <span className="text-muted-foreground w-24">{t("settings.email")}</span>
                         <span className="text-foreground">{profile.email}</span>
                     </div>
                     <div className="flex items-center gap-3 text-sm">
                         <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-muted-foreground w-24">Login Provider</span>
+                        <span className="text-muted-foreground w-24">{t("settings.loginProvider")}</span>
                         <span className="text-foreground">{providerLabel[profile.provider] || profile.provider}</span>
                     </div>
                     <div className="flex items-center gap-3 text-sm">
                         <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-muted-foreground w-24">Joined</span>
+                        <span className="text-muted-foreground w-24">{t("settings.joined")}</span>
                         <span className="text-foreground">{formatDate(profile.created_at)}</span>
                     </div>
                 </div>

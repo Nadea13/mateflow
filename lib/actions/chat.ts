@@ -13,7 +13,7 @@ import { getBills, updateBillStatus } from "./bills";
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
 
 export async function getMessages() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -36,7 +36,7 @@ export async function getMessages() {
 export async function sendMessage(formData: FormData) {
     const content = formData.get("content") as string;
     const file = formData.get("file") as File | null;
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     // 1. Process File Upload (if any)

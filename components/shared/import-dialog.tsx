@@ -92,12 +92,12 @@ export function ImportDialog({ type, onImport, triggerText = "Import" }: ImportD
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                    <Upload className="h-4 w-4" />
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 font-medium">
+                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
                     {triggerText}
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[480px]">
                 <DialogHeader>
                     <DialogTitle>Import {type.charAt(0).toUpperCase() + type.slice(1)}s</DialogTitle>
                     <DialogDescription>

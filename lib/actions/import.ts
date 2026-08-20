@@ -28,7 +28,7 @@ function parseCSV(csvText: string) {
 }
 
 export async function importCustomers(formData: FormData) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const file = formData.get("file") as File;
 
@@ -64,7 +64,7 @@ export async function importCustomers(formData: FormData) {
 }
 
 export async function importProducts(formData: FormData) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const file = formData.get("file") as File;
 
@@ -98,7 +98,7 @@ export async function importProducts(formData: FormData) {
 }
 
 export async function importExpenses(formData: FormData) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const file = formData.get("file") as File;
 
@@ -114,7 +114,7 @@ export async function importExpenses(formData: FormData) {
             const arrayBuffer = await file.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             const model = genAI.getGenerativeModel({
-                model: "gemini-1.5-flash",
+                model: "gemini-flash-latest",
                 generationConfig: {
                     responseMimeType: "application/json",
                     responseSchema: {
@@ -165,7 +165,7 @@ export async function importExpenses(formData: FormData) {
 }
 
 export async function importBills(formData: FormData) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const file = formData.get("file") as File;
 
@@ -183,7 +183,7 @@ export async function importBills(formData: FormData) {
             const arrayBuffer = await file.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             const model = genAI.getGenerativeModel({
-                model: "gemini-1.5-flash",
+                model: "gemini-flash-latest",
                 generationConfig: {
                     responseMimeType: "application/json",
                     responseSchema: {

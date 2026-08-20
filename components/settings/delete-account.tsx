@@ -8,6 +8,7 @@ import { AlertTriangle } from "lucide-react";
 import { softDeleteAccount } from "@/lib/actions/profile";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "@/lib/i18n/provider";
 
 export function DeleteAccountSection() {
     const [confirmText, setConfirmText] = useState("");
@@ -15,6 +16,7 @@ export function DeleteAccountSection() {
     const [showConfirm, setShowConfirm] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
+    const { t } = useTranslation();
 
     const handleDelete = async () => {
         if (confirmText !== "DELETE") return;
@@ -24,8 +26,8 @@ export function DeleteAccountSection() {
             const result = await softDeleteAccount() as any;
             if (result.success) {
                 toast({
-                    title: "Account Deleted",
-                    description: "Your account has been deactivated.",
+                    title: t("settings.accountDeleted"),
+                    description: t("settings.accountDeactivated"),
                 });
                 router.push("/login");
             } else {
@@ -51,25 +53,25 @@ export function DeleteAccountSection() {
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-destructive">
                     <AlertTriangle className="h-5 w-5" />
-                    Danger Zone
+                    {t("settings.dangerZone")}
                 </CardTitle>
                 <CardDescription>
-                    This action cannot be undone. Please proceed with caution.
+                    {t("settings.dangerZoneDesc")}
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 {!showConfirm ? (
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-foreground">Delete Account</p>
-                            <p className="text-xs text-muted-foreground">Deactivate your account and hide all your data.</p>
+                            <p className="text-sm font-medium text-foreground">{t("settings.deleteAccount")}</p>
+                            <p className="text-xs text-muted-foreground">{t("settings.deleteAccountDesc")}</p>
                         </div>
                         <Button
                             variant="outline"
                             className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
                             onClick={() => setShowConfirm(true)}
                         >
-                            Delete Account
+                            {t("settings.deleteAccount")}
                         </Button>
                     </div>
                 ) : (
@@ -80,7 +82,7 @@ export function DeleteAccountSection() {
                         <Input
                             value={confirmText}
                             onChange={(e) => setConfirmText(e.target.value)}
-                            placeholder="Type DELETE to confirm"
+                            placeholder={t("settings.typeDeleteConfirm")}
                             className="border-destructive/30"
                         />
                         <div className="flex gap-2">
@@ -89,7 +91,7 @@ export function DeleteAccountSection() {
                                 disabled={confirmText !== "DELETE" || deleting}
                                 onClick={handleDelete}
                             >
-                                {deleting ? "Deleting..." : "Confirm Delete"}
+                                {deleting ? t("settings.deleting") : t("settings.confirmDelete")}
                             </Button>
                             <Button
                                 variant="ghost"
@@ -98,7 +100,7 @@ export function DeleteAccountSection() {
                                     setConfirmText("");
                                 }}
                             >
-                                Cancel
+                                {t("common.cancel")}
                             </Button>
                         </div>
                     </div>

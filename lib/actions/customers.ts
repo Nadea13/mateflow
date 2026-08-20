@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { Customer } from "@/types";
 
 export async function getCustomers() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { data: customers, error } = await supabase
@@ -23,7 +23,7 @@ export async function getCustomers() {
 }
 
 export async function createCustomer(data: Partial<Customer>) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -42,12 +42,12 @@ export async function createCustomer(data: Partial<Customer>) {
         return { error: "Failed to create customer" };
     }
 
-    revalidatePath("/dashboard/customers");
+    revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/customers", "page");
     return { success: true };
 }
 
 export async function updateCustomer(id: string, data: Partial<Customer>) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { error } = await supabase
@@ -63,12 +63,12 @@ export async function updateCustomer(id: string, data: Partial<Customer>) {
         return { error: "Failed to update customer" };
     }
 
-    revalidatePath("/dashboard/customers");
+    revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/customers", "page");
     return { success: true };
 }
 
 export async function deleteCustomer(id: string) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { error } = await supabase
@@ -81,6 +81,6 @@ export async function deleteCustomer(id: string) {
         return { error: "Failed to delete customer" };
     }
 
-    revalidatePath("/dashboard/customers");
+    revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/customers", "page");
     return { success: true };
 }

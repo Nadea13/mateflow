@@ -1,6 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/components/theme-provider";
+import { CloudflareAnalytics } from "@/components/cloudflare/analytics";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -15,12 +18,12 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "MateFlow",
-  description: "Business Management System",
+  title: "Mate Flow",
+  description: "Next-Gen Backoffice & Business Management System",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
-
-import { Toaster } from "@/components/ui/toaster";
-import { ThemeProvider } from "@/components/theme-provider";
 
 export default function RootLayout({
   children,
@@ -28,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="th" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -48,6 +51,7 @@ export default function RootLayout({
         >
           {children}
           <Toaster />
+          <CloudflareAnalytics />
         </ThemeProvider>
       </body>
     </html>

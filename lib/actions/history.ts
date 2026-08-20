@@ -14,7 +14,7 @@ export interface HistoryItem {
 }
 
 export async function getHistory(type: string = "all"): Promise<HistoryItem[]> {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const limit = 50; // Fetch limit per category to keep it performant

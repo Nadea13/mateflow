@@ -9,7 +9,7 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
 
 export async function getProducts() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { data: products, error } = await supabase
@@ -27,7 +27,7 @@ export async function getProducts() {
 
 export async function createProduct(data: Partial<Product>) {
     console.log("Creating product with data:", data);
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -50,13 +50,13 @@ export async function createProduct(data: Partial<Product>) {
     }
 
     console.log("Product created successfully, revalidating path");
-    revalidatePath("/dashboard/products", "page");
+    revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/products", "page");
     return { success: true, isUpdate: false, product: data as Product, message: "Product created successfully" };
 }
 
 export async function updateProduct(id: string, data: Partial<Product>) {
     console.log(`Updating product ${id} with data:`, data);
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const updates = {
@@ -79,12 +79,12 @@ export async function updateProduct(id: string, data: Partial<Product>) {
     }
 
     console.log("Product updated successfully, revalidating path");
-    revalidatePath("/dashboard/products", "page");
+    revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/products", "page");
     return { success: true };
 }
 
 export async function deleteProduct(id: string) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { error } = await supabase
@@ -104,7 +104,7 @@ export async function deleteProduct(id: string) {
 
 export async function createOrUpdateProduct(data: Partial<Product>) {
     console.log("Creating or updating product with data:", data);
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -161,7 +161,7 @@ export async function createOrUpdateProduct(data: Partial<Product>) {
             return { error: "Failed to update existing product" };
         }
 
-        revalidatePath("/dashboard/products", "page");
+        revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/products", "page");
         return {
             success: true,
             message: `Updated existing product "${existingProduct.name}". Stock increased from ${currentStock} to ${newStock}.`,
@@ -177,7 +177,7 @@ export async function createOrUpdateProduct(data: Partial<Product>) {
 }
 
 export async function deleteProductByName(name: string) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { data: products } = await supabase
@@ -195,7 +195,7 @@ export async function deleteProductByName(name: string) {
 }
 
 export async function updateProductByName(name: string, updates: { name?: string, price?: number, stock?: number }) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { data: products } = await supabase

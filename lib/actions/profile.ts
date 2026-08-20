@@ -4,9 +4,27 @@ import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { Profile } from "@/types";
+
+export async function getUserProfile() {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return null;
+
+    const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+    return profile as Profile | null;
+}
 
 export async function getAuthProfile() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -23,7 +41,7 @@ export async function getAuthProfile() {
 }
 
 export async function getStoreProfile() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -43,12 +61,16 @@ export async function getStoreProfile() {
         tax_id: profile?.tax_id || "",
         signature_url: profile?.signature_url || "",
         store_phone: profile?.store_phone || "",
+        role: profile?.role || "owner",
+        etax_enabled: profile?.etax_enabled || false,
+        etax_api_key: profile?.etax_api_key || "",
+        etax_company_id: profile?.etax_company_id || "",
     };
 }
 
 // Backward compatibility
 export async function getProfile() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -69,7 +91,7 @@ export async function getProfile() {
 }
 
 export async function updateProfile(data: { store_name?: string; store_address?: string; tax_id?: string; store_phone?: string }) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -95,8 +117,35 @@ export async function updateProfile(data: { store_name?: string; store_address?:
     return { success: true };
 }
 
+export async function updateETaxSettings(data: { etax_enabled: boolean; etax_api_key: string; etax_company_id: string }) {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const { error } = await supabase
+        .from("profiles")
+        .upsert({
+            id: user.id,
+            etax_enabled: data.etax_enabled,
+            etax_api_key: data.etax_api_key,
+            etax_company_id: data.etax_company_id,
+            updated_at: new Date().toISOString(),
+        });
+
+    if (error) {
+        console.error("Error updating E-Tax settings:", error);
+        return { error: "Failed to update E-Tax settings" };
+    }
+
+    revalidatePath("/dashboard/tax");
+    revalidatePath("/dashboard/settings");
+    return { success: true };
+}
+
 export async function uploadSignature(formData: FormData) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -139,7 +188,7 @@ export async function uploadSignature(formData: FormData) {
 }
 
 export async function uploadAvatar(formData: FormData) {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -185,7 +234,7 @@ export async function uploadAvatar(formData: FormData) {
 }
 
 export async function softDeleteAccount() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -208,8 +257,25 @@ export async function softDeleteAccount() {
 }
 
 export async function signOutUser() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     await supabase.auth.signOut();
     redirect("/login");
+}
+
+export async function getTeamMembers() {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return [];
+
+    const { data, error } = await supabase.rpc("get_team_members");
+
+    if (error) {
+        console.error("Error fetching team members:", JSON.stringify(error, null, 2));
+        return [];
+    }
+
+    return data || [];
 }

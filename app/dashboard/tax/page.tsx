@@ -1,21 +1,25 @@
 import { TaxCalculator } from "@/components/tax/tax-calculator";
-import { Metadata } from "next";
+import { getYearlyTaxStats } from "@/lib/actions/tax";
+import { Suspense } from "react";
 
-export const dynamic = 'force-dynamic';
-
-export const metadata: Metadata = {
-    title: "Tax Report | MateFlow",
-    description: "Estimated Yearly Tax Calculation",
+export const metadata = {
+    title: "Tax & Reports | Mateflow",
+    description: "Manage your taxes, VAT, and Withholding Tax.",
 };
 
-export default function TaxPage() {
+export default async function TaxPage() {
+    const stats = await getYearlyTaxStats();
+
     return (
         <div className="space-y-6">
-            <div>
-                <h2 className="text-3xl font-bold tracking-tight">Yearly Tax Report</h2>
-                <p className="text-muted-foreground">Estimated income tax, VAT, and withholding tax.</p>
+            <div className="pb-3 border-b border-border">
+                <h1 className="text-xl font-semibold tracking-tight text-foreground">Tax & Reports</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">Manage your VAT, Withholding Tax, and Income Tax estimates.</p>
             </div>
-            <TaxCalculator />
+
+            <Suspense fallback={<div className="p-4 text-center text-muted-foreground">Loading tax data...</div>}>
+                <TaxCalculator initialStats={stats} />
+            </Suspense>
         </div>
     );
 }

@@ -11,9 +11,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { deleteExpense } from "@/lib/actions/expenses";
 import { Expense } from "@/types";
-import { Trash, FileText } from "lucide-react";
+import { Trash, FileText, HandCoins } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { EmptyState } from "@/components/shared/empty-state";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -25,12 +26,14 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useTranslation } from "@/lib/i18n/provider";
 
 interface ExpenseTableProps {
     expenses: Expense[];
 }
 
 export function ExpenseTable({ expenses }: ExpenseTableProps) {
+    const { t } = useTranslation();
     const { toast } = useToast();
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -44,7 +47,7 @@ export function ExpenseTable({ expenses }: ExpenseTableProps) {
                 toast({ title: "Error", description: result.error, variant: "destructive" });
             }
         } catch {
-            toast({ title: "Error", description: "Failed to delete expense.", variant: "destructive" });
+            toast({ title: "Error", description: "Unexpected error", variant: "destructive" });
         } finally {
             setDeletingId(null);
         }
@@ -52,9 +55,9 @@ export function ExpenseTable({ expenses }: ExpenseTableProps) {
 
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString("en-US", {
-            day: "numeric",
-            month: "short",
             year: "numeric",
+            month: "short",
+            day: "numeric",
         });
     };
 
@@ -63,11 +66,11 @@ export function ExpenseTable({ expenses }: ExpenseTableProps) {
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="sticky left-0 z-20 bg-background">No.</TableHead>
-                        <TableHead className="sticky left-[40px] z-20 bg-background">Date</TableHead>
-                        <TableHead>Title</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="sticky left-0 z-20 bg-muted/80">No.</TableHead>
+                        <TableHead className="sticky left-[40px] z-20 bg-muted/80">{t("expenses.date")}</TableHead>
+                        <TableHead>{t("expenses.expenseTitle")}</TableHead>
+                        <TableHead>{t("expenses.category")}</TableHead>
+                        <TableHead className="text-right">{t("expenses.amount")}</TableHead>
                         <TableHead className="w-[100px] text-right">Receipt</TableHead>
                         <TableHead className="w-[70px]"></TableHead>
                     </TableRow>
@@ -75,8 +78,13 @@ export function ExpenseTable({ expenses }: ExpenseTableProps) {
                 <TableBody>
                     {expenses.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center">
-                                No expenses found.
+                            <TableCell colSpan={7} className="p-0 border-0">
+                                <EmptyState
+                                    icon={HandCoins}
+                                    title={t("expenses.noExpenses")}
+                                    description={t("expenses.subtitle")}
+                                    className="border-0 my-0 rounded-none bg-transparent"
+                                />
                             </TableCell>
                         </TableRow>
                     ) : (
@@ -101,8 +109,24 @@ export function ExpenseTable({ expenses }: ExpenseTableProps) {
                                         {expense.category}
                                     </span>
                                 </TableCell>
-                                <TableCell className="text-right font-mono text-red-600">
-                                    -฿{expense.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                <TableCell className="text-right">
+                                    <div className="flex flex-col items-end gap-1">
+                                        <span className="font-mono text-red-600">
+                                            -฿{expense.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                        </span>
+                                        <div className="flex gap-1">
+                                            {expense.input_vat ? (
+                                                <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-sm bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 font-medium">
+                                                    VAT
+                                                </span>
+                                            ) : null}
+                                            {expense.wht_amount ? (
+                                                <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-sm bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-medium" title={`WHT ${expense.wht_rate}%: ฿${expense.wht_amount}`}>
+                                                    WHT
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                    </div>
                                 </TableCell>
                                 <TableCell className="text-right">
                                     {expense.receipt_url && (

@@ -15,10 +15,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createBill } from "@/lib/actions/bills";
 import { Customer, Product } from "@/types";
-import { Plus, Trash, Receipt, Percent, Tags } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Plus, Trash, Receipt, Percent, Tags, Globe } from "lucide-react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useCurrencyStore } from "@/lib/currency/store";
+import { formatMoney, SUPPORTED_CURRENCIES, CurrencyCode } from "@/lib/currency";
+import { useTranslation } from "@/lib/i18n/provider";
 
 interface LineItem {
     product_id: string;
@@ -36,10 +38,23 @@ interface Adjustment {
 interface CreateBillDialogProps {
     customers: Customer[];
     products: Product[];
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    showTrigger?: boolean;
 }
 
-export function CreateBillDialog({ customers, products }: CreateBillDialogProps) {
-    const [open, setOpen] = useState(false);
+export function CreateBillDialog({
+    customers,
+    products,
+    open: controlledOpen,
+    onOpenChange: setControlledOpen,
+    showTrigger = true,
+}: CreateBillDialogProps) {
+    const { t } = useTranslation();
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+    const setOpen = setControlledOpen !== undefined ? setControlledOpen : setInternalOpen;
+    
     const [loading, setLoading] = useState(false);
     const [customerId, setCustomerId] = useState("");
     const [note, setNote] = useState("");
@@ -49,7 +64,10 @@ export function CreateBillDialog({ customers, products }: CreateBillDialogProps)
     const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
     const [paymentTerms, setPaymentTerms] = useState(0);
     const [validityDays, setValidityDays] = useState(7);
-    const [includeVat, setIncludeVat] = useState(false);
+    const [taxPreset, setTaxPreset] = useState("none");
+
+    const { currency: globalCurrency } = useCurrencyStore();
+    const [billCurrency, setBillCurrency] = useState<CurrencyCode>(globalCurrency);
     const { toast } = useToast();
 
     const addItem = () => {
@@ -64,7 +82,7 @@ export function CreateBillDialog({ customers, products }: CreateBillDialogProps)
     const updateItem = (index: number, field: keyof LineItem, value: string | number) => {
         const updated = [...items];
         if (field === "product_id") {
-            const product = products.find(p => p.id === value);
+            const product = products.find((p) => p.id === value);
             if (product) {
                 updated[index] = {
                     ...updated[index],
@@ -94,10 +112,32 @@ export function CreateBillDialog({ customers, products }: CreateBillDialogProps)
         setAdjustments(updated);
     };
 
+    const handleTaxPresetChange = (preset: string) => {
+        setTaxPreset(preset);
+        // Remove existing standard taxes first
+        const nonTaxAdjustments = adjustments.filter(
+            (a) => !["VAT 7%", "VAT 20% (UK/EU)", "US Sales Tax (8.25%)", "GST 10% (AU)", "GST 9% (SG)"].includes(a.label)
+        );
+
+        if (preset === "vat_7") {
+            setAdjustments([...nonTaxAdjustments, { label: "VAT 7%", type: "percent", value: 7 }]);
+        } else if (preset === "vat_20") {
+            setAdjustments([...nonTaxAdjustments, { label: "VAT 20% (UK/EU)", type: "percent", value: 20 }]);
+        } else if (preset === "us_sales_tax") {
+            setAdjustments([...nonTaxAdjustments, { label: "US Sales Tax (8.25%)", type: "percent", value: 8.25 }]);
+        } else if (preset === "gst_au") {
+            setAdjustments([...nonTaxAdjustments, { label: "GST 10% (AU)", type: "percent", value: 10 }]);
+        } else if (preset === "gst_sg") {
+            setAdjustments([...nonTaxAdjustments, { label: "GST 9% (SG)", type: "percent", value: 9 }]);
+        } else {
+            setAdjustments(nonTaxAdjustments);
+        }
+    };
+
     // Calculations
     const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
 
-    const adjustmentAmounts = adjustments.map(adj => {
+    const adjustmentAmounts = adjustments.map((adj) => {
         if (adj.type === "percent") {
             return (subtotal * adj.value) / 100;
         }
@@ -112,28 +152,30 @@ export function CreateBillDialog({ customers, products }: CreateBillDialogProps)
             toast({ title: "Error", description: "Please select a customer.", variant: "destructive" });
             return;
         }
-        const validItems = items.filter(i => i.product_id && i.quantity > 0);
+        const validItems = items.filter((i) => i.product_id && i.quantity > 0);
         if (validItems.length === 0) {
             toast({ title: "Error", description: "Please add at least one product.", variant: "destructive" });
             return;
         }
 
-        // Filter out empty adjustments
-        const validAdjustments = adjustments.filter(a => a.label.trim() && a.value !== 0);
+        const validAdjustments = adjustments.filter((a) => a.label.trim() && a.value !== 0);
 
         setLoading(true);
         try {
-            const result = await createBill({
+            const result = (await createBill({
                 customer_id: customerId,
                 note,
                 items: validItems,
                 adjustments: validAdjustments,
                 payment_terms: paymentTerms,
                 validity_days: validityDays,
-            }) as any;
+            })) as any;
 
             if (result.success) {
-                toast({ title: "Bill Created", description: `Bill ฿${grandTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })} created.` });
+                toast({
+                    title: "Invoice Created",
+                    description: `Invoice ${formatMoney(grandTotal, billCurrency)} created successfully.`,
+                });
                 setOpen(false);
                 // Reset
                 setCustomerId("");
@@ -142,7 +184,7 @@ export function CreateBillDialog({ customers, products }: CreateBillDialogProps)
                 setAdjustments([]);
                 setPaymentTerms(0);
                 setValidityDays(7);
-                setIncludeVat(false);
+                setTaxPreset("none");
             } else {
                 toast({ title: "Error", description: result.error, variant: "destructive" });
             }
@@ -153,52 +195,71 @@ export function CreateBillDialog({ customers, products }: CreateBillDialogProps)
         }
     };
 
-    const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2 });
-
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button>
-                    <Receipt className="mr-2 h-4 w-4" /> Create Bill
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+            {showTrigger && (
+                <DialogTrigger asChild>
+                    <Button size="sm" className="h-8 text-xs gap-1.5 font-medium">
+                        <Receipt className="h-3.5 w-3.5" /> {t("bills.createBill")}
+                    </Button>
+                </DialogTrigger>
+            )}
+            <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Create Bill</DialogTitle>
-                    <DialogDescription>Select a customer and add products.</DialogDescription>
+                    <DialogTitle>Create International Commercial Invoice</DialogTitle>
+                    <DialogDescription>Select customer, currency, tax jurisdiction, and line items.</DialogDescription>
                 </DialogHeader>
 
                 <div className="grid gap-4 py-4">
-                    {/* Customer Select */}
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="customer">Customer</Label>
-                        <select
-                            id="customer"
-                            value={customerId}
-                            onChange={(e) => setCustomerId(e.target.value)}
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                            <option value="">Select customer...</option>
-                            {customers.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                        </select>
+                    {/* Customer & Currency */}
+                    <div className="grid grid-cols-3 gap-3">
+                        <div className="col-span-2 grid gap-1.5">
+                            <Label htmlFor="customer">Customer *</Label>
+                            <select
+                                id="customer"
+                                value={customerId}
+                                onChange={(e) => setCustomerId(e.target.value)}
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                                <option value="">Select customer...</option>
+                                {customers.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.name} {c.country ? `(${c.country})` : ""}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="currency">Currency</Label>
+                            <select
+                                id="currency"
+                                value={billCurrency}
+                                onChange={(e) => setBillCurrency(e.target.value as CurrencyCode)}
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-2 py-2 text-sm ring-offset-background font-semibold"
+                            >
+                                {Object.values(SUPPORTED_CURRENCIES).map((c) => (
+                                    <option key={c.code} value={c.code}>
+                                        {c.code} ({c.symbol})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-1.5">
-                            <Label htmlFor="payment_terms">Credit (Days)</Label>
+                            <Label htmlFor="payment_terms">Payment Terms (Credit Days)</Label>
                             <Input
                                 id="payment_terms"
                                 type="number"
                                 min={0}
                                 value={paymentTerms}
                                 onChange={(e) => setPaymentTerms(parseInt(e.target.value) || 0)}
-                                placeholder="0 = Cash"
+                                placeholder="0 = Due on Receipt (Cash)"
                             />
                         </div>
                         <div className="grid gap-1.5">
-                            <Label htmlFor="validity_days">Valid (Days)</Label>
+                            <Label htmlFor="validity_days">Quote Validity (Days)</Label>
                             <Input
                                 id="validity_days"
                                 type="number"
@@ -211,10 +272,13 @@ export function CreateBillDialog({ customers, products }: CreateBillDialogProps)
 
                     {/* Line Items */}
                     <div className="grid gap-2">
-                        <Label>Products</Label>
+                        <Label>Line Items & Products</Label>
                         <div className="space-y-2">
                             {items.map((item, index) => (
-                                <div key={index} className="flex flex-col md:flex-row md:items-center gap-2 p-3 bg-muted rounded-lg border">
+                                <div
+                                    key={index}
+                                    className="flex flex-col md:flex-row md:items-center gap-2 p-3 bg-muted rounded-lg border"
+                                >
                                     <div className="flex-1 w-full">
                                         <select
                                             value={item.product_id}
@@ -222,8 +286,10 @@ export function CreateBillDialog({ customers, products }: CreateBillDialogProps)
                                             className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
                                         >
                                             <option value="">Select product...</option>
-                                            {products.map(p => (
-                                                <option key={p.id} value={p.id}>{p.name} (฿{p.price} / Stock: {p.stock})</option>
+                                            {products.map((p) => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.name} {p.sku ? `[${p.sku}]` : ""} ({formatMoney(p.price, billCurrency)} / Stock: {p.stock})
+                                                </option>
                                             ))}
                                         </select>
                                     </div>
@@ -237,7 +303,7 @@ export function CreateBillDialog({ customers, products }: CreateBillDialogProps)
                                             placeholder="Qty"
                                         />
                                         <span className="text-sm font-mono w-24 text-right">
-                                            ฿{fmt(item.quantity * item.unit_price)}
+                                            {formatMoney(item.quantity * item.unit_price, billCurrency)}
                                         </span>
                                         <Button
                                             variant="ghost"
@@ -258,110 +324,115 @@ export function CreateBillDialog({ customers, products }: CreateBillDialogProps)
                     </div>
 
                     {/* Subtotal */}
-                    <div className="flex items-center justify-between px-3 py-2">
-                        <span className="text-sm text-muted-foreground">Subtotal</span>
-                        <span className="text-sm font-mono font-medium">฿{fmt(subtotal)}</span>
+                    <div className="flex items-center justify-between px-3 py-2 bg-muted/40 rounded">
+                        <span className="text-sm text-muted-foreground font-medium">Subtotal</span>
+                        <span className="text-sm font-mono font-bold">{formatMoney(subtotal, billCurrency)}</span>
                     </div>
 
-                    {/* Adjustments (Discounts / Taxes) */}
+                    {/* Global Tax Engine Presets */}
                     <div className="grid gap-2">
                         <Label className="flex items-center gap-2">
-                            <Tags className="h-4 w-4" /> Discount / Tax
+                            <Globe className="h-4 w-4 text-primary" /> Tax Engine / Jurisdiction
                         </Label>
-                        <div className="flex items-center space-x-2 pb-2">
-                            <Checkbox
-                                id="vat"
-                                checked={includeVat}
-                                onCheckedChange={(checked) => {
-                                    setIncludeVat(!!checked);
-                                    if (checked) {
-                                        // Add VAT adjustment if not exists
-                                        if (!adjustments.some(a => a.label === "VAT 7%")) {
-                                            setAdjustments([...adjustments, { label: "VAT 7%", type: "percent", value: 7 }]);
-                                        }
-                                    } else {
-                                        // Remove VAT adjustment
-                                        setAdjustments(adjustments.filter(a => a.label !== "VAT 7%"));
-                                    }
-                                }}
-                            />
-                            <label
-                                htmlFor="vat"
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        <div className="grid grid-cols-2 gap-3">
+                            <select
+                                value={taxPreset}
+                                onChange={(e) => handleTaxPresetChange(e.target.value)}
+                                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                             >
-                                Apply VAT 7%
-                            </label>
+                                <option value="none">Zero Tax / Tax Exempt</option>
+                                <option value="vat_7">🇹🇭 Thailand VAT (7%)</option>
+                                <option value="vat_20">🇬🇧/🇪🇺 UK & EU Standard VAT (20%)</option>
+                                <option value="us_sales_tax">🇺🇸 US General Sales Tax (~8.25%)</option>
+                                <option value="gst_au">🇦🇺 Australia GST (10%)</option>
+                                <option value="gst_sg">🇸🇬 Singapore GST (9%)</option>
+                            </select>
+
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={addAdjustment}
+                                className="flex items-center gap-1"
+                            >
+                                <Percent className="h-3.5 w-3.5" /> Add Custom Discount / Fee
+                            </Button>
                         </div>
+
                         {adjustments.length > 0 && (
-                            <div className="space-y-2">
+                            <div className="space-y-2 mt-2">
                                 {adjustments.map((adj, index) => (
-                                    <div key={index} className="flex flex-col md:flex-row md:items-center gap-2 p-3 bg-muted rounded-lg border">
+                                    <div
+                                        key={index}
+                                        className="flex flex-col md:flex-row md:items-center gap-2 p-2.5 bg-muted/60 rounded-lg border text-sm"
+                                    >
                                         <Input
                                             value={adj.label}
                                             onChange={(e) => updateAdjustment(index, "label", e.target.value)}
-                                            placeholder="e.g. Discount, VAT 7%"
-                                            className="w-full md:flex-1 h-9"
+                                            placeholder="e.g. Volume Discount, Freight / Shipping"
+                                            className="w-full md:flex-1 h-8 text-sm"
                                         />
                                         <div className="flex items-center gap-2 justify-between md:justify-end w-full md:w-auto">
                                             <div className="flex items-center gap-1">
                                                 <select
                                                     value={adj.type}
                                                     onChange={(e) => updateAdjustment(index, "type", e.target.value)}
-                                                    className="h-9 rounded-md border border-input bg-background px-2 text-sm w-16"
+                                                    className="h-8 rounded-md border border-input bg-background px-2 text-xs w-16"
                                                 >
                                                     <option value="percent">%</option>
-                                                    <option value="fixed">฿</option>
+                                                    <option value="fixed">{SUPPORTED_CURRENCIES[billCurrency].symbol}</option>
                                                 </select>
                                                 <Input
                                                     type="number"
                                                     value={adj.value}
-                                                    onChange={(e) => updateAdjustment(index, "value", parseFloat(e.target.value) || 0)}
-                                                    className="w-20 h-9 text-right"
+                                                    onChange={(e) =>
+                                                        updateAdjustment(index, "value", parseFloat(e.target.value) || 0)
+                                                    }
+                                                    className="w-20 h-8 text-right text-sm"
                                                     placeholder="0"
                                                 />
                                             </div>
-                                            <span className="text-xs font-mono w-20 text-right text-muted-foreground whitespace-nowrap">
+                                            <span className="text-xs font-mono w-24 text-right text-muted-foreground whitespace-nowrap">
                                                 {adj.type === "percent"
-                                                    ? `฿${fmt((subtotal * adj.value) / 100)}`
-                                                    : `฿${fmt(adj.value)}`
-                                                }
+                                                    ? formatMoney((subtotal * adj.value) / 100, billCurrency)
+                                                    : formatMoney(adj.value, billCurrency)}
                                             </span>
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-8 w-8 text-red-400 hover:text-red-600"
+                                                className="h-7 w-7 text-red-400 hover:text-red-600"
                                                 onClick={() => removeAdjustment(index)}
                                             >
-                                                <Trash className="h-4 w-4" />
+                                                <Trash className="h-3.5 w-3.5" />
                                             </Button>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         )}
-                        <Button variant="outline" size="sm" onClick={addAdjustment} className="w-fit">
-                            <Percent className="mr-1 h-4 w-4" /> Add Discount / Tax
-                        </Button>
                     </div>
 
                     {/* Note */}
                     <div className="grid gap-1.5">
-                        <Label htmlFor="note">Note (optional)</Label>
-                        <Textarea id="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Additional notes..." />
+                        <Label htmlFor="note">Commercial Terms & Note</Label>
+                        <Textarea
+                            id="note"
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder="Incoterms (e.g. FOB, CIF), bank wire instructions, or customer reference..."
+                        />
                     </div>
 
                     {/* Grand Total */}
-                    <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/20">
-                        <span className="text-sm font-medium text-muted-foreground">Grand Total</span>
-                        <span className="text-xl font-bold text-primary">
-                            ฿{fmt(grandTotal)}
-                        </span>
+                    <div className="flex items-center justify-between p-3.5 bg-primary/10 rounded-lg border border-primary/20">
+                        <span className="text-sm font-semibold text-foreground">Total Payable Amount</span>
+                        <span className="text-xl font-bold text-primary font-mono">{formatMoney(grandTotal, billCurrency)}</span>
                     </div>
                 </div>
 
                 <DialogFooter>
                     <Button onClick={handleSubmit} disabled={loading}>
-                        {loading ? "Creating..." : "Create Bill"}
+                        {loading ? "Issuing Invoice..." : "Issue Commercial Invoice"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

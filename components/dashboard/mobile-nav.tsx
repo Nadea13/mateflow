@@ -5,65 +5,66 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
     LayoutDashboard,
-    History,
     Settings,
-    Users,
+    Library,
     Receipt,
     HandCoins,
-    Scale,
-    Package,
+    MapPin,
+    Calculator,
 } from "lucide-react"
+import { useTranslation } from "@/lib/i18n/provider"
 
 const navItems = [
     {
-        title: "Dashboard",
+        titleKey: "nav.dashboard",
         href: "/dashboard",
         icon: LayoutDashboard,
     },
     {
-        title: "Products",
-        href: "/dashboard/products",
-        icon: Package,
+        titleKey: "nav.registry",
+        href: "/dashboard/catalog",
+        icon: Library,
     },
     {
-        title: "Customers",
-        href: "/dashboard/customers",
-        icon: Users,
-    },
-    {
-        title: "Bills",
+        titleKey: "nav.bills",
         href: "/dashboard/bills",
         icon: Receipt,
     },
     {
-        title: "Expenses",
+        titleKey: "nav.expenses",
         href: "/dashboard/expenses",
         icon: HandCoins,
     },
     {
-        title: "Tax",
-        href: "/dashboard/tax",
-        icon: Scale,
-    },
-    {
-        title: "History",
-        href: "/dashboard/history",
-        icon: History,
-    },
-    {
-        title: "Settings",
+        titleKey: "nav.settings",
         href: "/dashboard/settings",
         icon: Settings,
     },
 ]
 
-export function MobileNav() {
+export function MobileNav({ userRole = 'owner' }: { userRole?: 'owner' | 'admin' | 'sales' }) {
     const pathname = usePathname()
+    const { t } = useTranslation()
 
     return (
         <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card md:hidden pb-safe print:hidden">
-            <div className="flex h-16 items-center justify-around px-2">
+            <div className="flex h-16 items-center justify-around px-2 overflow-x-auto whitespace-nowrap hide-scrollbar">
                 {navItems.map((item) => {
+                    // Role-Based Filtering
+                    if (userRole === "sales") {
+                        if (
+                            item.href === "/dashboard/settings" ||
+                            item.href === "/dashboard/expenses"
+                        ) {
+                            return null; // Hide these for sales
+                        }
+                    }
+                    if (userRole === "admin") {
+                        if (item.href === "/dashboard/expenses") {
+                            return null; // Hide expense for admin
+                        }
+                    }
+
                     const isActive = pathname === item.href
                     return (
                         <Link
@@ -85,7 +86,7 @@ export function MobileNav() {
                                     strokeWidth={isActive ? 2.5 : 2}
                                 />
                             </div>
-                            <span className="text-[10px] font-medium">{item.title}</span>
+                            <span className="text-[10px] font-medium">{t(item.titleKey)}</span>
                         </Link>
                     )
                 })}

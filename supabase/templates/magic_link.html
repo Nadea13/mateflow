@@ -1,0 +1,43 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Your Verification Code - Mateflow</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 40px 20px;">
+  <div style="max-width: 480px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 36px 32px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    
+    <!-- Logo & Header -->
+    <div style="text-align: center; margin-bottom: 24px;">
+      <div style="display: inline-block; width: 44px; height: 44px; background-color: #0f172a; border-radius: 10px; color: #ffffff; font-size: 22px; font-weight: bold; line-height: 44px;">
+        M
+      </div>
+      <h1 style="color: #0f172a; font-size: 20px; font-weight: bold; margin-top: 14px; margin-bottom: 4px;">Mateflow Security Verification</h1>
+      <p style="color: #64748b; font-size: 13px; margin: 0;">Global Enterprise Backoffice & Operations Hub</p>
+    </div>
+
+    <!-- Instructions -->
+    <p style="color: #334155; font-size: 14px; line-height: 22px; margin-bottom: 20px;">
+      Hello,<br>
+      Please use the following <strong>6-digit verification code (OTP)</strong> to complete your sign in / registration:
+    </p>
+
+    <!-- Large 6-Digit OTP Box -->
+    <div style="background-color: #f1f5f9; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 18px; text-align: center; margin: 24px 0;">
+      <div style="font-size: 36px; font-weight: 800; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace; color: #0f172a;">
+        {{ .Token }}
+      </div>
+      <p style="color: #64748b; font-size: 11px; margin: 6px 0 0 0;">This code is valid for 10 minutes</p>
+    </div>
+
+    <!-- Security Warning -->
+    <p style="color: #94a3b8; font-size: 12px; line-height: 18px; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
+      If you did not request this verification code, you can safely ignore this email. Someone may have entered your email address by mistake.
+    </p>
+
+    <div style="text-align: center; margin-top: 24px; color: #cbd5e1; font-size: 11px;">
+      &copy; Mateflow Inc. &bull; Enterprise Operations Hub
+    </div>
+  </div>
+</body>
+</html>
