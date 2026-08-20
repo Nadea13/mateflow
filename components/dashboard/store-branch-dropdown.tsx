@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -145,22 +145,16 @@ export function StoreBranchDropdown({
                 <PopoverTrigger asChild>
                     <button className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-border/80 bg-sidebar-accent/50 hover:bg-sidebar-accent hover:border-border transition-all duration-150 text-left shadow-2xs group cursor-pointer">
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div className={`p-2 rounded-lg ${currentRoleBadge.iconBg} shrink-0 shadow-2xs`}>
+                            <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0 shadow-2xs">
                                 <Store className="h-4 w-4" />
                             </div>
                             <div className="flex flex-col min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-1.5 leading-none">
-                                    <span className="text-xs font-bold text-foreground truncate max-w-[110px]" title={displayStoreName}>
-                                        {displayStoreName}
-                                    </span>
-                                    {/* Role Badge Indicator */}
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${currentRoleBadge.color}`}>
-                                        {currentRoleBadge.label}
-                                    </span>
-                                </div>
-                                <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1.5 leading-none">
+                                <span className="text-xs font-bold text-foreground truncate" title={displayStoreName}>
+                                    {displayStoreName}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1 leading-none">
                                     <Building2 className="h-2.5 w-2.5 text-primary shrink-0" />
-                                    <span className="truncate max-w-[120px] font-medium">{branchLabel}</span>
+                                    <span className="truncate max-w-[140px] font-medium">{branchLabel}</span>
                                 </span>
                             </div>
                         </div>
@@ -181,19 +175,14 @@ export function StoreBranchDropdown({
                                     )}
                                 </div>
                                 <div className="flex flex-col min-w-0">
-                                    <span className="text-xs font-bold text-foreground truncate max-w-[140px]">
+                                    <span className="text-xs font-bold text-foreground truncate max-w-[150px]">
                                         {displayStoreName}
                                     </span>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                        <span className={`text-[8px] font-bold px-1 rounded border ${currentRoleBadge.color}`}>
-                                            {currentRoleBadge.label}
+                                    {currentStoreObj?.tax_id && (
+                                        <span className="text-[9px] text-muted-foreground font-mono truncate max-w-[120px] mt-0.5">
+                                            Tax ID: {currentStoreObj.tax_id}
                                         </span>
-                                        {currentStoreObj?.tax_id && (
-                                            <span className="text-[9px] text-muted-foreground font-mono truncate max-w-[90px]">
-                                                {currentStoreObj.tax_id}
-                                            </span>
-                                        )}
-                                    </div>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
@@ -350,7 +339,6 @@ export function StoreBranchDropdown({
                         {stores.map((store) => {
                             const isCurrent = store.id === currentStoreObj?.id;
                             const isSwitching = switchingStoreId === store.id;
-                            const roleInfo = roleLabels[store.user_role || "owner"] || roleLabels.owner;
 
                             return (
                                 <button
@@ -383,12 +371,11 @@ export function StoreBranchDropdown({
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
-                                                <span className={`px-1 rounded border text-[8px] font-bold ${roleInfo.color}`}>
-                                                    {roleInfo.label}
+                                            {store.tax_id && (
+                                                <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                                                    Tax: {store.tax_id}
                                                 </span>
-                                                {store.tax_id && <span>Tax: {store.tax_id}</span>}
-                                            </div>
+                                            )}
                                         </div>
                                     </div>
 
