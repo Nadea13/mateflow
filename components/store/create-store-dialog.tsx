@@ -10,7 +10,7 @@ import { ImageUploadZone } from "@/components/ui/image-upload-zone";
 import { updateProfile } from "@/lib/actions/profile";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Store, Loader2, FileCheck2, PenTool, Upload, X, Camera } from "lucide-react";
+import { Store, Loader2, Upload, X } from "lucide-react";
 
 interface CreateStoreDialogProps {
     open: boolean;
@@ -126,7 +126,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                     </DialogHeader>
 
                     <div className="grid gap-4 py-3">
-                        {/* 1:1 Aspect Ratio Logo Dropzone (Styled consistently with signature upload) */}
+                        {/* 1:1 Aspect Ratio Logo Dropzone */}
                         <div className="flex flex-col items-center justify-center space-y-1.5">
                             <div
                                 onClick={() => logoInputRef.current?.click()}
@@ -198,7 +198,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             />
                         </div>
 
-                        {/* เบอร์โทร และ เลขประจำตัวผู้เสียภาษี */}
+                        {/* เบอร์โทร และ เลขประจำตัวผู้เสียภาษี (เอา Icon ออก) */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <Label htmlFor="store-phone" className="text-xs font-semibold">เบอร์โทรศัพท์</Label>
@@ -211,8 +211,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <Label htmlFor="tax-id" className="text-xs font-semibold flex items-center gap-1">
-                                    <FileCheck2 className="h-3.5 w-3.5 text-primary" />
+                                <Label htmlFor="tax-id" className="text-xs font-semibold">
                                     เลขประจำตัวผู้เสียภาษี (Tax ID)
                                 </Label>
                                 <Input
@@ -238,12 +237,9 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             />
                         </div>
 
-                        {/* ลายเซ็นต์ผู้มีอำนาจ */}
+                        {/* ลายเซ็นต์ผู้มีอำนาจ (เอา Icon ออก และเอาวงเล็บออก) */}
                         <div className="space-y-1.5 border-t border-border/60 pt-3">
-                            <div className="flex items-center gap-1.5 mb-1">
-                                <PenTool className="h-3.5 w-3.5 text-primary" />
-                                <Label className="text-xs font-semibold">ลายเซ็นต์ผู้มีอำนาจ (Authorized Signature)</Label>
-                            </div>
+                            <Label className="text-xs font-semibold block mb-1">ลายเซ็นต์ผู้มีอำนาจ</Label>
                             <ImageUploadZone
                                 value={signatureUrl}
                                 onChange={(url) => setSignatureUrl(url)}
