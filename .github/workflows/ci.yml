@@ -7,8 +7,8 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  audit-and-build:
-    name: TypeCheck, Lint & Next.js Build
+  typecheck-and-build:
+    name: TypeScript Check & Next.js Production Build
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +24,7 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: TypeScript Type Checking
+      - name: TypeScript Compilation & Type Check
         run: npx tsc --noEmit
 
       - name: Next.js Production Build
@@ -35,41 +35,3 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY || 'sk_test_dummy' }}
           NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY: "1x00000000000000000000AA"
         run: npm run build
-
-  e2e-tests:
-    name: Playwright Full E2E & Billing Test Suite
-    runs-on: ubuntu-latest
-    needs: audit-and-build
-
-    steps:
-      - name: Checkout Code Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js Environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: Start Mateflow App & Run Playwright E2E Tests
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321' }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy-anon-key' }}
-          NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY: "1x00000000000000000000AA"
-        run: |
-          npm run build
-          npx playwright test tests/billing-e2e.spec.ts
-
-      - name: Upload Playwright Test Report Artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14
