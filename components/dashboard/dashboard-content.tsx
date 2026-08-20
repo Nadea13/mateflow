@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useTranslation } from "@/lib/i18n/provider";
 import { useCurrencyStore } from "@/lib/currency/store";
@@ -61,16 +61,10 @@ export function DashboardContent({ userName, stats, recentActivity }: DashboardC
                 </div>
                 {/* Daily Quick Launchers */}
                 <div className="flex items-center gap-2 flex-wrap">
-                    <Link href="/dashboard/pos">
-                        <Button size="sm" className="h-8 text-xs gap-1.5 font-bold bg-primary text-primary-foreground shadow-sm cursor-pointer">
-                            <ShoppingCart className="h-3.5 w-3.5" />
-                            เปิดหน้าร้าน POS
-                        </Button>
-                    </Link>
                     <Link href="/dashboard/bills">
-                        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 font-semibold cursor-pointer">
-                            <FileText className="h-3.5 w-3.5 text-primary" />
-                            ออกเอกสารบิล
+                        <Button size="sm" className="h-8 text-xs gap-1.5 font-bold bg-primary text-primary-foreground shadow-sm cursor-pointer">
+                            <FileText className="h-3.5 w-3.5" />
+                            ออกเอกสาร
                         </Button>
                     </Link>
                     <Link href="/dashboard/catalog">
