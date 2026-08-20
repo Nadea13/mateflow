@@ -4,12 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import sharp from "sharp";
 
-export const config = {
-    api: {
-        bodyParser: false,
-        responseLimit: false,
-    },
-};
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
     try {
@@ -23,83 +18,51 @@ export async function POST(req: NextRequest) {
 
         const formData = await req.formData();
         const file = formData.get("file") as File | null;
-        const folder = (formData.get("folder") as string) || "products";
+        const folder = (formData.get("folder") as string) || "general";
 
         if (!file) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });
         }
 
-        // Validate image mime types
-        const allowedTypes = [
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-            "image/gif",
-            "image/svg+xml",
-            "image/avif",
-            "image/heic",
-            "image/heif",
-            "image/tiff",
-            "image/bmp",
-        ];
-        
-        if (!allowedTypes.includes(file.type) && !file.type.startsWith("image/")) {
-            return NextResponse.json({ error: "Only image files are allowed." }, { status: 400 });
+        // Validate file type is an image
+        if (!file.type.startsWith("image/")) {
+            return NextResponse.json({ error: "Only image files are allowed" }, { status: 400 });
         }
 
-        const rawBytes = await file.arrayBuffer();
-        let rawBuffer = Buffer.from(rawBytes);
+        // Convert file stream to Buffer for Sharp processing
+        const arrayBuffer = await file.arrayBuffer();
+        const inputBuffer = Buffer.from(arrayBuffer);
 
-        let finalBuffer: Buffer;
-        let finalContentType: string;
-        let finalExtension: string;
+        // Convert ANY input image of ANY size to highly optimized AVIF format
+        const avifBuffer = await sharp(inputBuffer)
+            .avif({
+                quality: 80,
+                lossless: false,
+                effort: 4, // Balanced CPU effort & compression ratio
+                chromaSubsampling: '4:4:4', // Preserve pristine color sharpness
+            })
+            .toBuffer();
 
-        // If SVG, keep vector format as SVG
-        if (file.type === "image/svg+xml") {
-            finalBuffer = rawBuffer;
-            finalContentType = "image/svg+xml";
-            finalExtension = "svg";
-        } else {
-            // Convert any high-res image (PNG, JPG, WebP, HEIC, TIFF, large photos) to high-efficiency AVIF
-            try {
-                finalBuffer = await sharp(rawBuffer)
-                    .rotate() // Auto-orient based on EXIF
-                    .avif({
-                        quality: 80, // High visual fidelity
-                        effort: 4,   // Fast CPU encoding
-                        chromaSubsampling: '4:4:4', // Preserve fine text/logos
-                    })
-                    .toBuffer();
+        // Generate clean unique filename with .avif extension
+        const timestamp = Date.now();
+        const randomString = Math.random().toString(36).substring(2, 8);
+        const fileName = `${folder}/${user.id}-${timestamp}-${randomString}.avif`;
 
-                finalContentType = "image/avif";
-                finalExtension = "avif";
-            } catch (sharpError) {
-                console.warn("Sharp AVIF conversion fallback:", sharpError);
-                finalBuffer = rawBuffer;
-                finalContentType = file.type || "image/jpeg";
-                finalExtension = file.name.split(".").pop() || "jpg";
-            }
-        }
-
-        const baseFileName = file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
-        const finalFileName = `${baseFileName}.${finalExtension}`;
-
-        const result = await uploadToR2(finalBuffer, finalFileName, finalContentType, folder);
-
-        if (!result.success) {
-            return NextResponse.json({ error: result.error || "Upload failed" }, { status: 500 });
-        }
+        // Upload optimized AVIF buffer to Cloudflare R2
+        const publicUrl = await uploadToR2(avifBuffer, fileName, "image/avif");
 
         return NextResponse.json({
             success: true,
-            url: result.url,
-            key: result.key,
-            format: finalExtension,
-            sizeOriginal: file.size,
-            sizeOptimized: finalBuffer.length,
+            url: publicUrl,
+            format: "avif",
+            originalSize: inputBuffer.length,
+            optimizedSize: avifBuffer.length,
         });
-    } catch (err: any) {
-        console.error("API Upload Error:", err);
-        return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    } catch (error: any) {
+        console.error("Cloudflare R2 Upload API Error:", error);
+        return NextResponse.json(
+            { error: error.message || "Failed to process and upload image" },
+            { status: 500 }
+        );
     }
 }
