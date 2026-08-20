@@ -19,61 +19,65 @@ export async function getProducts(storeId?: string) {
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
     let targetStoreId = storeId || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
 
-    let products: any[] = [];
+    let rawProducts: any[] = [];
 
-    // 1. First priority: Try fetching for active store
+    // Simple select without foreign key joins to avoid PostgREST relationship failures
     if (targetStoreId) {
-        const { data: storeProds, error: storeErr } = await supabase
+        const { data, error } = await supabase
             .from("products")
-            .select(`
-                *,
-                variants:product_variants(*),
-                supplier:suppliers(name)
-            `)
+            .select("*")
             .eq("store_id", targetStoreId)
             .order("created_at", { ascending: false });
 
-        if (!storeErr && storeProds && storeProds.length > 0) {
-            products = storeProds;
+        if (!error && data && data.length > 0) {
+            rawProducts = data;
         }
     }
 
-    // 2. Second priority: If no products under this specific store, check all stores belonging to user
-    if (products.length === 0 && validStoreIds.length > 0) {
-        const { data: allStoreProds, error: allErr } = await supabase
+    if (rawProducts.length === 0 && validStoreIds.length > 0) {
+        const { data, error } = await supabase
             .from("products")
-            .select(`
-                *,
-                variants:product_variants(*),
-                supplier:suppliers(name)
-            `)
+            .select("*")
             .in("store_id", validStoreIds)
             .order("created_at", { ascending: false });
 
-        if (!allErr && allStoreProds && allStoreProds.length > 0) {
-            products = allStoreProds;
+        if (!error && data && data.length > 0) {
+            rawProducts = data;
         }
     }
 
-    // 3. Third priority: Fallback to all products (in case user just created first store or products have unassigned store_id)
-    if (products.length === 0) {
-        const { data: generalProds, error: genErr } = await supabase
+    if (rawProducts.length === 0) {
+        const { data, error } = await supabase
             .from("products")
-            .select(`
-                *,
-                variants:product_variants(*),
-                supplier:suppliers(name)
-            `)
+            .select("*")
             .order("created_at", { ascending: false });
 
-        if (!genErr && generalProds) {
-            products = generalProds;
+        if (!error && data) {
+            rawProducts = data;
         }
     }
 
-    return products.map((p: any) => ({
+    if (rawProducts.length === 0) {
+        return [];
+    }
+
+    // Fetch suppliers separately to attach names cleanly
+    const supplierIds = rawProducts.map(p => p.supplier_id).filter(Boolean);
+    const supplierMap: Record<string, string> = {};
+    if (supplierIds.length > 0) {
+        const { data: suppliers } = await supabase
+            .from("suppliers")
+            .select("id, name")
+            .in("id", supplierIds);
+        if (suppliers) {
+            suppliers.forEach(s => { supplierMap[s.id] = s.name; });
+        }
+    }
+
+    return rawProducts.map((p: any) => ({
         ...p,
-        supplier_name: p.supplier?.name || undefined,
+        supplier_name: p.supplier_id ? (supplierMap[p.supplier_id] || "-") : "-",
+        variants: [],
     })) as Product[];
 }
 
@@ -94,7 +98,6 @@ export async function createProduct(data: Partial<Product>) {
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
     let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
 
-    // If still no store, create or get a default store for this user
     if (!targetStoreId) {
         const { data: defaultStore } = await supabase
             .from("stores")
