@@ -26,17 +26,20 @@ export interface UploadResult {
 
 /**
  * Upload a file Buffer directly to Cloudflare R2
+ * Preserves the exact fileKey with its designated folder (e.g. avatars/, signatures/, products/, receipts/)
  */
 export async function uploadToR2(
     fileBuffer: Buffer,
     fileName: string,
     contentType: string,
-    folder = "products"
+    folder = "general"
 ): Promise<UploadResult> {
     const isConfigured = !!(accountId && accessKeyId && secretAccessKey);
 
-    const ext = fileName.split(".").pop() || "png";
-    const fileKey = `${folder}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
+    // If fileName already includes a specific folder prefix, preserve it as fileKey
+    const fileKey = fileName.includes("/")
+        ? fileName
+        : `${folder}/${fileName}`;
 
     if (!isConfigured) {
         // Fallback for Local Dev / Sandbox without R2 credentials
@@ -118,10 +121,11 @@ export async function deleteFromR2(fileKey: string): Promise<boolean> {
             Bucket: bucketName,
             Key: fileKey,
         });
+
         await r2Client.send(command);
         return true;
     } catch (err) {
-        console.error("Error deleting from R2:", err);
+        console.error("Delete from R2 Error:", err);
         return false;
     }
 }
