@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useTranslation } from "@/lib/i18n/provider";
 import { AuthProfileCard } from "@/components/settings/auth-profile-card";
@@ -13,7 +13,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { History, ChevronRight, Store, ArrowRight } from "lucide-react";
 import { TeamManagement } from "@/components/settings/team-management";
 import { Button } from "@/components/ui/button";
-import { Branch } from "@/types";
 
 interface SettingsContentProps {
     authProfile: {
@@ -25,10 +24,9 @@ interface SettingsContentProps {
     };
     storeProfile: any;
     teamMembers: any[];
-    branches?: Branch[];
 }
 
-export function SettingsContent({ authProfile, storeProfile, teamMembers, branches = [] }: SettingsContentProps) {
+export function SettingsContent({ authProfile, storeProfile, teamMembers }: SettingsContentProps) {
     const { t } = useTranslation();
 
     return (
@@ -98,27 +96,32 @@ export function SettingsContent({ authProfile, storeProfile, teamMembers, branch
             <Card className="max-w-2xl overflow-hidden md:hidden">
                 <CardHeader>
                     <CardTitle>{t("settings.transactionHistory")}</CardTitle>
-                    <CardDescription>{t("settings.transactionHistoryDesc")}</CardDescription>
+                    <CardDescription>
+                        {t("settings.transactionHistoryDesc")}
+                    </CardDescription>
                 </CardHeader>
-                <CardContent className="p-0">
+                <CardContent className="space-y-4">
                     <Link
                         href="/dashboard/history"
-                        className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors border-t"
+                        className="flex items-center justify-between p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors"
                     >
                         <div className="flex items-center gap-3">
                             <History className="h-5 w-5 text-muted-foreground" />
-                            <span className="font-medium">{t("settings.transactionHistory")}</span>
+                            <div>
+                                <p className="text-sm font-medium">{t("settings.viewTransactions")}</p>
+                                <p className="text-xs text-muted-foreground">{t("settings.viewTransactionsDesc")}</p>
+                            </div>
                         </div>
                         <ChevronRight className="h-5 w-5 text-muted-foreground" />
                     </Link>
                 </CardContent>
             </Card>
 
-            {/* Language Section */}
+            {/* Language Selection */}
             <Card className="max-w-2xl">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        {t("settings.language")}
+                        {t("settings.languageTitle")}
                     </CardTitle>
                     <CardDescription>{t("settings.languageDesc")}</CardDescription>
                 </CardHeader>
@@ -127,19 +130,20 @@ export function SettingsContent({ authProfile, storeProfile, teamMembers, branch
                 </CardContent>
             </Card>
 
-            {/* Theme Section */}
+            {/* Appearance Section */}
             <Card className="max-w-2xl">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        {t("settings.theme")}
+                        {t("settings.appearanceTitle")}
                     </CardTitle>
-                    <CardDescription>{t("settings.themeDesc")}</CardDescription>
+                    <CardDescription>{t("settings.appearanceDesc")}</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <ThemeToggle />
                 </CardContent>
             </Card>
 
+            {/* Danger Zone: Account Deletion */}
             <DeleteAccountSection />
         </div>
     );
