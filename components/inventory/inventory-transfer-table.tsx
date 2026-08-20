@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { Location, Product, InventoryLevel } from "@/types";
@@ -36,10 +36,10 @@ export function InventoryTransferTable({ locations, products, inventoryLevels }:
 
         setLoading(prev => ({ ...prev, [productId]: true }));
 
-        const result = await adjustInventory(productId, selectedLocation, amount);
+        const result = (await adjustInventory(productId, selectedLocation, amount)) as any;
 
         if (result.success) {
-            toast.success(`Inventory adjusted by ${amount > 0 ? '+' : ''}${amount}. Total stock is now ${result.totalStock}`);
+            toast.success(`Inventory adjusted by ${amount > 0 ? '+' : ''}${amount}.`);
             setTransferAmounts(prev => ({ ...prev, [productId]: "" }));
         } else {
             toast.error(result.error || "Failed to adjust inventory");
@@ -58,62 +58,77 @@ export function InventoryTransferTable({ locations, products, inventoryLevels }:
                     </SelectTrigger>
                     <SelectContent>
                         {locations.map((loc) => (
-                            <SelectItem key={loc.id} value={loc.id}>
-                                {loc.name}
+                            <SelectItem key={loc.id} value={loc.id} className="text-xs">
+                                {loc.name} {loc.code ? `(${loc.code})` : ""}
                             </SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
             </div>
 
-            <div className="rounded-md border overflow-x-auto">
+            <div className="border rounded-md">
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="bg-muted/80">{t("registry.tabProducts")}</TableHead>
-                            <TableHead className="bg-muted/80">{t("registry.table.stockLevel")}</TableHead>
-                            <TableHead className="bg-muted/80">Location Stock</TableHead>
-                            <TableHead className="bg-muted/80">Adjust Stock (+/-)</TableHead>
-                            <TableHead className="bg-muted/80 w-[70px]"></TableHead>
+                            <TableHead className="w-[30%]">{t("registry.productName")}</TableHead>
+                            <TableHead className="w-[20%]">SKU</TableHead>
+                            <TableHead className="w-[15%] text-right">{t("registry.stock")}</TableHead>
+                            <TableHead className="w-[20%] text-right">Location Stock</TableHead>
+                            <TableHead className="w-[15%] text-right">Adjust Stock</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {products.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center h-24 text-xs text-muted-foreground">
-                                    {t("common.noData")}
+                                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                                    No products found.
                                 </TableCell>
                             </TableRow>
                         ) : (
                             products.map((product) => {
                                 const level = inventoryLevels.find(
-                                    l => l.product_id === product.id && l.location_id === selectedLocation
+                                    (l) => l.product_id === product.id && l.location_id === selectedLocation
                                 );
                                 const locationStock = level ? level.quantity : 0;
 
                                 return (
                                     <TableRow key={product.id}>
-                                        <TableCell className="font-medium">{product.name}</TableCell>
-                                        <TableCell>{product.stock}</TableCell>
-                                        <TableCell>{locationStock}</TableCell>
-                                        <TableCell>
-                                            <Input
-                                                type="number"
-                                                placeholder="+10 or -5"
-                                                value={transferAmounts[product.id] || ""}
-                                                onChange={(e) => setTransferAmounts(prev => ({ ...prev, [product.id]: e.target.value }))}
-                                                className="w-32"
-                                                disabled={!selectedLocation}
-                                            />
+                                        <TableCell className="font-medium text-xs">
+                                            {product.name}
                                         </TableCell>
-                                        <TableCell>
-                                            <Button
-                                                onClick={() => handleAdjust(product.id)}
-                                                disabled={loading[product.id] || !selectedLocation || !transferAmounts[product.id]}
-                                                size="sm"
-                                            >
-                                                {loading[product.id] ? "Saving..." : "Apply"}
-                                            </Button>
+                                        <TableCell className="text-muted-foreground text-xs font-mono">
+                                            {product.sku || "-"}
+                                        </TableCell>
+                                        <TableCell className="text-right text-xs font-mono font-semibold">
+                                            {product.stock}
+                                        </TableCell>
+                                        <TableCell className="text-right text-xs font-mono font-semibold text-primary">
+                                            {locationStock}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex items-center justify-end gap-1.5">
+                                                <Input
+                                                    type="number"
+                                                    placeholder="+/-"
+                                                    value={transferAmounts[product.id] || ""}
+                                                    onChange={(e) =>
+                                                        setTransferAmounts({
+                                                            ...transferAmounts,
+                                                            [product.id]: e.target.value,
+                                                        })
+                                                    }
+                                                    className="w-20 h-7 text-xs font-mono text-right"
+                                                />
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    disabled={loading[product.id] || !transferAmounts[product.id]}
+                                                    onClick={() => handleAdjust(product.id)}
+                                                    className="h-7 text-[11px] px-2"
+                                                >
+                                                    {loading[product.id] ? "Saving..." : "Set"}
+                                                </Button>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 );

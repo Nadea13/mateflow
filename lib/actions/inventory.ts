@@ -16,6 +16,7 @@ export async function getLocations(storeId?: string) {
     let targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
 
     if (!targetStoreId) {
+        // Check owned store
         const { data: defaultStore } = await supabase
             .from("stores")
             .select("id")
@@ -25,12 +26,23 @@ export async function getLocations(storeId?: string) {
 
         if (defaultStore) {
             targetStoreId = defaultStore.id;
+        } else {
+            // Check member store (employee)
+            const { data: memberStore } = await supabase
+                .from("store_team_members")
+                .select("store_id")
+                .eq("user_id", user.id)
+                .order("created_at", { ascending: true })
+                .maybeSingle();
+            if (memberStore) {
+                targetStoreId = memberStore.store_id;
+            }
         }
     }
 
     if (!targetStoreId) return [];
 
-    // 2. Fetch ONLY branches belonging to this active store
+    // 2. Fetch branches belonging to this active store
     const { data: branchs, error } = await supabase
         .from("branchs")
         .select("*")
@@ -58,9 +70,7 @@ export async function createLocation(data: Partial<Location>) {
         return { error: "Unauthorized" };
     }
 
-    // Determine target active store
     let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
-
     if (!targetStoreId) {
         const { data: defaultStore } = await supabase
             .from("stores")
@@ -68,75 +78,102 @@ export async function createLocation(data: Partial<Location>) {
             .eq("owner_id", user.id)
             .order("created_at", { ascending: true })
             .maybeSingle();
-
-        if (defaultStore) {
-            targetStoreId = defaultStore.id;
-        }
+        if (defaultStore) targetStoreId = defaultStore.id;
     }
 
     if (!targetStoreId) {
-        return { error: "กรุณาสร้างหรือเลือกร้านค้าก่อนเพิ่มสาขา" };
+        return { error: "Store not found" };
     }
 
-    const payload: any = {
-        store_id: targetStoreId,
-        name: data.name,
-        code: data.code || null,
-        type: data.type || "warehouse",
-        country: data.country || "TH",
-        address: data.address || null,
-    };
-
-    const { error } = await supabase.from("branchs").insert(payload);
+    const { data: location, error } = await supabase
+        .from("branchs")
+        .insert({
+            store_id: targetStoreId,
+            name: data.name,
+            code: data.code,
+            type: data.type || "warehouse",
+            country: data.country || "TH",
+            address: data.address,
+        })
+        .select()
+        .single();
 
     if (error) {
         console.error("Error creating branch:", error);
-        return { error: error.message };
+        return { error: "Failed to create branch" };
     }
 
-    revalidatePath("/dashboard/inventory", "page");
-    revalidatePath("/dashboard/catalog", "page");
-    revalidatePath("/dashboard/store", "page");
     revalidatePath("/dashboard", "layout");
-    return { success: true };
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard/store");
+    return { success: true, location };
 }
 
 export async function updateLocation(id: string, data: Partial<Location>) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    const { error } = await supabase.from("branchs").update({
-        ...data,
-        updated_at: new Date().toISOString()
-    }).eq("id", id);
+    const { error } = await supabase
+        .from("branchs")
+        .update({
+            name: data.name,
+            code: data.code,
+            type: data.type,
+            country: data.country,
+            address: data.address,
+        })
+        .eq("id", id);
 
     if (error) {
         console.error("Error updating branch:", error);
-        return { error: error.message };
+        return { error: "Failed to update branch" };
     }
 
-    revalidatePath("/dashboard/inventory", "page");
-    revalidatePath("/dashboard/catalog", "page");
-    revalidatePath("/dashboard/store", "page");
     revalidatePath("/dashboard", "layout");
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard/store");
     return { success: true };
 }
 
-export async function getInventoryLevels(locationId?: string) {
+export async function deleteLocation(id: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    let query = supabase.from("inventory_levels").select(`
-        *,
-        location:branchs(name),
-        product:products(name)
-    `);
+    const { error } = await supabase
+        .from("branchs")
+        .delete()
+        .eq("id", id);
 
-    if (locationId) {
-        query = query.eq("location_id", locationId);
+    if (error) {
+        console.error("Error deleting branch:", error);
+        return { error: "Failed to delete branch" };
     }
 
-    let { data, error } = await query;
+    revalidatePath("/dashboard", "layout");
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard/store");
+    return { success: true };
+}
+
+export async function getInventoryLevels(storeId?: string) {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return [];
+
+    let targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+
+    let query = supabase.from("inventory_levels").select(`
+        *,
+        branch:branchs ( name, code )
+    `);
+
+    if (targetStoreId) {
+        query = query.eq("store_id", targetStoreId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
         console.error("Error fetching inventory levels:", error);
@@ -145,58 +182,72 @@ export async function getInventoryLevels(locationId?: string) {
 
     return (data || []).map((item: any) => ({
         ...item,
-        location_name: item.location?.name,
-        product_name: item.product?.name
+        location_name: item.branch?.name,
+        location_code: item.branch?.code,
     }));
 }
 
-export async function adjustInventory(productId: string, locationId: string, quantityChange: number) {
+export async function updateStockLevel(productId: string, locationId: string, quantity: number, variantId?: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    // Get current inventory level
-    const { data: currentLevel, error: fetchError } = await supabase
+    let query = supabase
         .from("inventory_levels")
-        .select("quantity")
+        .select("id, quantity")
+        .eq("product_id", productId)
+        .eq("location_id", locationId);
+
+    if (variantId) {
+        query = query.eq("variant_id", variantId);
+    } else {
+        query = query.is("variant_id", null);
+    }
+
+    const { data: existing } = await query.maybeSingle();
+
+    if (existing) {
+        const { error } = await supabase
+            .from("inventory_levels")
+            .update({
+                quantity,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", existing.id);
+
+        if (error) return { error: "Failed to update stock level" };
+    } else {
+        const activeStoreId = cookieStore.get("active_store_id")?.value;
+        const { error } = await supabase
+            .from("inventory_levels")
+            .insert({
+                store_id: activeStoreId,
+                product_id: productId,
+                location_id: locationId,
+                variant_id: variantId || null,
+                quantity,
+            });
+
+        if (error) return { error: "Failed to insert stock level" };
+    }
+
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard/catalog");
+    return { success: true };
+}
+
+export async function adjustInventory(productId: string, locationId: string, amount: number) {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+
+    const { data: existing } = await supabase
+        .from("inventory_levels")
+        .select("id, quantity")
         .eq("product_id", productId)
         .eq("location_id", locationId)
-        .single();
+        .maybeSingle();
 
-    let newQuantity = quantityChange;
-    if (currentLevel) {
-        newQuantity += Number(currentLevel.quantity);
-    }
+    const currentQty = existing?.quantity || 0;
+    const newQty = Math.max(0, currentQty + amount);
 
-    // Upsert the new level
-    const { error: upsertError } = await supabase
-        .from("inventory_levels")
-        .upsert({
-            product_id: productId,
-            location_id: locationId,
-            quantity: newQuantity,
-            updated_at: new Date().toISOString()
-        }, { onConflict: 'product_id, location_id' });
-
-    if (upsertError) {
-        console.error("Error adjusting inventory:", upsertError);
-        return { error: upsertError.message };
-    }
-
-    // We also need to update the total stock in the `products` table
-    const { data: allLevels } = await supabase
-        .from("inventory_levels")
-        .select("quantity")
-        .eq("product_id", productId);
-
-    const totalStock = allLevels?.reduce((sum, item) => sum + Number(item.quantity), 0) || 0;
-
-    await supabase.from("products").update({
-        stock: totalStock,
-        updated_at: new Date().toISOString()
-    }).eq("id", productId);
-
-    revalidatePath("/dashboard/catalog", "page");
-    revalidatePath("/dashboard/inventory", "page");
-    revalidatePath("/dashboard", "layout");
-    return { success: true, newQuantity, totalStock };
+    return updateStockLevel(productId, locationId, newQty);
 }
