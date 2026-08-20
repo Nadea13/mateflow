@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bill } from "@/types";
-import { Printer, Download, QrCode, FileText, Receipt, CheckCircle, Building2, Phone, Mail, MapPin, Sparkles } from "lucide-react";
+import { Printer, Download, QrCode, FileText, Receipt, CheckCircle, Building2, Phone, Mail, MapPin, Sparkles, Calendar, Clock } from "lucide-react";
 import { formatMoney } from "@/lib/currency";
 import QRCode from "qrcode";
 import promptpayQR from "promptpay-qr";
@@ -53,18 +53,24 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
 
     const billNumber = `INV-${bill.id.slice(0, 8).toUpperCase()}`;
 
-    // Determine if VAT / Tax was included in adjustments or store settings
+    // Determine if VAT / Tax was included in adjustments
     const hasVat = bill.adjustments && bill.adjustments.some(
         (adj) => adj.label?.toLowerCase().includes("vat") || adj.label?.toLowerCase().includes("tax") || adj.label?.includes("ภาษี")
     );
 
-    // Dynamic Title Logic based on status & VAT
+    // Dynamic Title & Status Logic
     let documentTitleThai = "ใบแจ้งหนี้";
     let documentTitleEn = "INVOICE";
+    let statusColor = "text-amber-600 bg-amber-500/10 border-amber-500/20";
 
-    if (bill.status === "draft") {
+    if (bill.status === "quotation") {
+        documentTitleThai = "ใบเสนอราคา";
+        documentTitleEn = "QUOTATION / PROFORMA INVOICE";
+        statusColor = "text-sky-600 bg-sky-500/10 border-sky-500/20";
+    } else if (bill.status === "draft") {
         documentTitleThai = "ใบแจ้งหนี้";
-        documentTitleEn = "INVOICE (DRAFT)";
+        documentTitleEn = "INVOICE (PENDING PAYMENT)";
+        statusColor = "text-amber-600 bg-amber-500/10 border-amber-500/20";
     } else if (bill.status === "paid") {
         if (hasVat) {
             documentTitleThai = "ใบเสร็จรับเงิน / ใบกำกับภาษี";
@@ -73,10 +79,40 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
             documentTitleThai = "ใบเสร็จรับเงิน";
             documentTitleEn = "RECEIPT";
         }
+        statusColor = "text-emerald-600 bg-emerald-500/10 border-emerald-500/20";
     } else if (bill.status === "cancelled") {
         documentTitleThai = "ใบแจ้งหนี้ (ยกเลิก)";
         documentTitleEn = "VOID INVOICE";
+        statusColor = "text-rose-600 bg-rose-500/10 border-rose-500/20";
     }
+
+    // Due Date & Validity Calculations
+    const validityDays = bill.validity_days || 7;
+    const paymentTerms = bill.payment_terms || 0;
+
+    const createdAtDate = new Date(bill.created_at);
+    
+    // Quotation expiration date
+    const quoteExpireDate = new Date(createdAtDate);
+    quoteExpireDate.setDate(quoteExpireDate.getDate() + validityDays);
+
+    // Invoice due date
+    const invoiceDueDate = new Date(createdAtDate);
+    invoiceDueDate.setDate(invoiceDueDate.getDate() + paymentTerms);
+
+    const formattedQuoteExpire = quoteExpireDate.toLocaleDateString("th-TH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+    });
+
+    const formattedInvoiceDue = paymentTerms === 0 
+        ? "ชำระเงินทันที (Due upon receipt)" 
+        : invoiceDueDate.toLocaleDateString("th-TH", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+        });
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -92,7 +128,7 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                 {documentTitleThai}
                             </DialogTitle>
                             <DialogDescription className="text-xs text-muted-foreground">
-                                รหัสเอกสาร: {billNumber} • สถานะ: <span className="uppercase font-semibold text-foreground">{bill.status}</span>
+                                รหัสเอกสาร: {billNumber} • สถานะ: <span className="font-semibold text-foreground">{documentTitleThai}</span>
                             </DialogDescription>
                         </div>
                     </div>
@@ -160,14 +196,27 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                 </div>
 
                                 <div className="text-right space-y-2">
-                                    <div className="inline-block px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg font-bold text-sm">
+                                    <div className={`inline-block px-3 py-1.5 rounded-lg font-bold text-sm border ${statusColor}`}>
                                         {documentTitleThai}
                                     </div>
                                     <p className="text-[10px] font-mono tracking-wider text-muted-foreground uppercase">{documentTitleEn}</p>
                                     <div className="text-xs space-y-1 font-mono pt-1">
                                         <p><span className="text-muted-foreground">เลขที่:</span> <span className="font-bold text-foreground">{billNumber}</span></p>
-                                        <p><span className="text-muted-foreground">วันที่:</span> {billDate}</p>
-                                        <p><span className="text-muted-foreground">สถานะ:</span> <span className={`uppercase font-semibold ${bill.status === "paid" ? "text-emerald-600" : "text-amber-600"}`}>{bill.status}</span></p>
+                                        <p><span className="text-muted-foreground">วันที่เอกสาร:</span> {billDate}</p>
+
+                                        {/* Show Quotation Validity when status is quotation */}
+                                        {bill.status === "quotation" && (
+                                            <p className="text-sky-600 font-semibold">
+                                                <span className="text-muted-foreground">อายุการเสนอราคา:</span> {validityDays} วัน (ถึง {formattedQuoteExpire})
+                                            </p>
+                                        )}
+
+                                        {/* Show Invoice Terms/Due date when status is draft */}
+                                        {bill.status === "draft" && (
+                                            <p className="text-amber-600 font-semibold">
+                                                <span className="text-muted-foreground">กำหนดชำระ (อายุหนี้):</span> {paymentTerms > 0 ? `${paymentTerms} วัน (${formattedInvoiceDue})` : formattedInvoiceDue}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -181,7 +230,11 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                 <div className="text-right">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">เงื่อนไขการชำระเงิน</span>
                                     <p className="font-medium text-foreground mt-0.5">
-                                        {bill.status === "paid" ? "ชำระเงินเรียบร้อยแล้ว (Paid)" : "รอการชำระเงิน (Pending)"}
+                                        {bill.status === "paid" 
+                                            ? "ชำระเงินเรียบร้อยแล้ว (Paid)" 
+                                            : bill.status === "quotation"
+                                            ? `ยืนยันราคาภายใน ${validityDays} วัน`
+                                            : paymentTerms > 0 ? `เครดิต ${paymentTerms} วัน` : "ชำระทันที / PromptPay"}
                                     </p>
                                 </div>
                             </div>
@@ -229,6 +282,7 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                             <div className="pt-4 border-t border-border/80 grid grid-cols-1 sm:grid-cols-2 gap-6">
                                 {/* Left Side: PromptPay QR Code & Notes */}
                                 <div className="space-y-3">
+                                    {/* Show QR code when status is draft (ใบแจ้งหนี้) or quotation (ใบเสนอราคา) */}
                                     {qrCodeDataUrl && bill.status !== "paid" ? (
                                         <div className="inline-flex items-center gap-3 p-2.5 rounded-xl border border-border/80 bg-muted/30">
                                             <img src={qrCodeDataUrl} alt="PromptPay QR" className="w-20 h-20 rounded-md border border-border" />
@@ -239,6 +293,11 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                                 </p>
                                                 <p className="text-muted-foreground">บัญชี: {storeProfile?.tax_id || storeProfile?.store_phone || "ร้านค้า"}</p>
                                                 <p className="font-mono font-bold text-primary">฿{Number(bill.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                                                {bill.status === "draft" && (
+                                                    <p className="text-amber-600 font-semibold pt-0.5">
+                                                        กำหนดชำระ: {formattedInvoiceDue}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     ) : bill.status === "paid" ? (
@@ -319,8 +378,18 @@ export function BillViewerDialog({ bill, storeProfile, open, onOpenChange }: Bil
                                 </div>
                                 <div className="flex justify-between">
                                     <span>CUST: {bill.customer_name || "GUEST"}</span>
-                                    <span className="uppercase font-bold">{bill.status}</span>
+                                    <span className="uppercase font-bold">{documentTitleThai}</span>
                                 </div>
+                                {bill.status === "quotation" && (
+                                    <div className="text-[9px] text-neutral-500 pt-0.5">
+                                        เสนอราคาถึง: {formattedQuoteExpire}
+                                    </div>
+                                )}
+                                {bill.status === "draft" && (
+                                    <div className="text-[9px] text-neutral-500 pt-0.5">
+                                        กำหนดชำระ: {formattedInvoiceDue}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Slip Items */}

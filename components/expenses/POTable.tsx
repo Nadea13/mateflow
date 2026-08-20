@@ -1,77 +1,77 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { PurchaseOrder } from "@/types";
-import { updatePOStatus, deletePurchaseOrder, getPurchaseOrder } from "@/lib/actions/purchase-orders";
-import { toast } from "sonner";
-import { MoreHorizontal, Eye, Trash2, CheckCircle2, FileText } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, Eye, FileCheck, XCircle, FileText } from "lucide-react";
+import { PurchaseOrder } from "@/types";
 import { PODialog } from "./PODialog";
-import { useTranslation } from "@/lib/i18n/provider";
+import { updatePOStatus, getPurchaseOrder } from "@/lib/actions/purchase-orders";
+import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { useTranslation } from "@/lib/i18n/provider";
 
 interface POTableProps {
     pos: PurchaseOrder[];
+    onUpdate?: () => void;
 }
 
-export function POTable({ pos }: POTableProps) {
+export function POTable({ pos, onUpdate }: POTableProps) {
     const { t } = useTranslation();
-    const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+    const [selectedPO, setSelectedPO] = useState<PurchaseOrder | undefined>();
     const [dialogOpen, setDialogOpen] = useState(false);
 
+    const getStatusVariant = (status: string) => {
+        switch (status) {
+            case "draft":
+                return "secondary";
+            case "ordered":
+                return "default";
+            case "received":
+                return "outline";
+            case "cancelled":
+                return "destructive";
+            default:
+                return "secondary";
+        }
+    };
+
     const handleViewPO = async (id: string) => {
-        const po = await getPurchaseOrder(id);
-        if (po) {
-            setSelectedPO(po);
+        const fullPO = await getPurchaseOrder(id);
+        if (fullPO) {
+            setSelectedPO(fullPO);
             setDialogOpen(true);
         }
     };
 
-    const handleUpdateStatus = async (id: string, status: string) => {
-        const res = await updatePOStatus(id, status);
-        if ('error' in res) {
-            toast.error(res.error);
-        } else {
-            toast.success(`PO status updated to ${status}`);
-        }
-    };
-
-    const handleDelete = async (id: string) => {
-        if (confirm("Are you sure you want to delete this PO?")) {
-            const res = await deletePurchaseOrder(id);
+    const handleStatusChange = async (id: string, status: "draft" | "ordered" | "received" | "cancelled") => {
+        try {
+            const res = await updatePOStatus(id, status);
             if ('error' in res) {
                 toast.error(res.error);
             } else {
-                toast.success("PO deleted successfully");
+                toast.success(`PO status updated to ${status}`);
+                onUpdate?.();
             }
-        }
-    };
-
-    const getStatusVariant = (status: string) => {
-        switch (status) {
-            case "draft": return "outline";
-            case "sent": return "secondary";
-            case "received": return "default";
-            case "cancelled": return "destructive";
-            default: return "outline";
+        } catch (error) {
+            toast.error("Failed to update status");
         }
     };
 
     return (
         <>
-            <div className="rounded-md border overflow-x-auto">
+            <div className="rounded-md border">
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="bg-muted/80">PO Number</TableHead>
-                            <TableHead className="bg-muted/80">{t("registry.tabSuppliers")}</TableHead>
-                            <TableHead className="bg-muted/80">{t("bills.date")}</TableHead>
-                            <TableHead className="bg-muted/80">{t("bills.amount")}</TableHead>
-                            <TableHead className="bg-muted/80">{t("bills.status")}</TableHead>
-                            <TableHead className="bg-muted/80 text-right">{t("bills.actions")}</TableHead>
+                            <TableHead>PO Number</TableHead>
+                            <TableHead>Supplier</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Total Amount</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -91,8 +91,8 @@ export function POTable({ pos }: POTableProps) {
                                 <TableRow key={po.id}>
                                     <TableCell className="font-medium">{po.po_number}</TableCell>
                                     <TableCell>{po.supplier_name}</TableCell>
-                                    <TableCell>{new Date(po.date).toLocaleDateString()}</TableCell>
-                                    <TableCell>{po.total_amount.toLocaleString()}</TableCell>
+                                    <TableCell>{new Date(po.date || po.created_at || Date.now()).toLocaleDateString()}</TableCell>
+                                    <TableCell>{(po.total_amount || 0).toLocaleString()}</TableCell>
                                     <TableCell>
                                         <Badge variant={getStatusVariant(po.status)}>
                                             {po.status.charAt(0).toUpperCase() + po.status.slice(1)}
@@ -109,14 +109,21 @@ export function POTable({ pos }: POTableProps) {
                                                 <DropdownMenuItem onClick={() => handleViewPO(po.id)}>
                                                     <Eye className="mr-2 h-4 w-4" /> View Details
                                                 </DropdownMenuItem>
-                                                {po.status !== 'received' && (
-                                                    <DropdownMenuItem onClick={() => handleUpdateStatus(po.id, 'received')}>
-                                                        <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" /> Mark Received
+                                                {po.status === "draft" && (
+                                                    <DropdownMenuItem onClick={() => handleStatusChange(po.id, "ordered")}>
+                                                        <FileCheck className="mr-2 h-4 w-4 text-blue-500" /> Mark Ordered
                                                     </DropdownMenuItem>
                                                 )}
-                                                <DropdownMenuItem onClick={() => handleDelete(po.id)} className="text-destructive">
-                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete PO
-                                                </DropdownMenuItem>
+                                                {po.status === "ordered" && (
+                                                    <DropdownMenuItem onClick={() => handleStatusChange(po.id, "received")}>
+                                                        <FileCheck className="mr-2 h-4 w-4 text-green-500" /> Mark Received
+                                                    </DropdownMenuItem>
+                                                )}
+                                                {po.status !== "cancelled" && po.status !== "received" && (
+                                                    <DropdownMenuItem onClick={() => handleStatusChange(po.id, "cancelled")}>
+                                                        <XCircle className="mr-2 h-4 w-4 text-red-500" /> Cancel PO
+                                                    </DropdownMenuItem>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>
@@ -127,13 +134,11 @@ export function POTable({ pos }: POTableProps) {
                 </Table>
             </div>
 
-            {selectedPO && (
-                <PODialog
-                    open={dialogOpen}
-                    onOpenChange={setDialogOpen}
-                    po={selectedPO}
-                />
-            )}
+            <PODialog
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+                po={selectedPO}
+            />
         </>
     );
 }

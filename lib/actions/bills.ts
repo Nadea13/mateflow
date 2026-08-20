@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { Bill, BillItem } from "@/types";
+import { Bill } from "@/types";
 import { getStores } from "@/lib/actions/profile";
 
 export async function getBills(storeId?: string) {
@@ -25,13 +25,15 @@ export async function getBills(storeId?: string) {
         return [];
     }
 
-    let query = supabase.from("bills").select(`
-        *,
-        customers ( name ),
-        items:bill_items ( * )
-    `)
-    .eq("store_id", targetStoreId)
-    .order("created_at", { ascending: false });
+    let query = supabase
+        .from("bills")
+        .select(`
+            *,
+            customer:customers(name),
+            items:bill_items (*)
+        `)
+        .eq("store_id", targetStoreId)
+        .order("created_at", { ascending: false });
 
     let { data: bills, error } = await query;
 
@@ -39,11 +41,11 @@ export async function getBills(storeId?: string) {
         return [];
     }
 
-    return (bills || []).map((bill: any) => ({
-        ...bill,
-        customer_name: bill.customers?.name || "Unknown",
-        items: bill.items || [],
-    }));
+    return bills.map((b: any) => ({
+        ...b,
+        customer_name: b.customer?.name || "Guest",
+        items: b.items || [],
+    })) as Bill[];
 }
 
 export async function getBill(id: string) {
@@ -56,23 +58,20 @@ export async function getBill(id: string) {
     const validStores = await getStores();
     const validStoreIds = validStores.map(s => s.id);
 
-    // Fetch bill with bill items
-    const { data: bill, error: billError } = await supabase
+    const { data: bill, error } = await supabase
         .from("bills")
         .select(`
             *,
-            items:bill_items ( * )
+            items:bill_items (*)
         `)
         .eq("id", id)
         .single();
 
-    if (billError || !bill || !validStoreIds.includes(bill.store_id)) {
-        console.error("Error fetching bill or access denied:", JSON.stringify(billError));
+    if (error || !bill || !validStoreIds.includes(bill.store_id)) {
         return null;
     }
 
-    // Fetch customer name
-    let customer_name = "Unknown";
+    let customer_name = "Guest";
     if (bill.customer_id) {
         const { data: customer } = await supabase
             .from("customers")
@@ -98,6 +97,7 @@ export async function createBill(data: {
         unit_price: number;
     }[];
     note?: string;
+    status?: "quotation" | "draft" | "paid";
     adjustments?: { label: string; type: "percent" | "fixed"; value: number }[];
     payment_terms?: number;
     validity_days?: number;
@@ -153,10 +153,12 @@ export async function createBill(data: {
         customer_id: data.customer_id,
         total_amount,
         note: data.note || null,
-        status: "draft",
+        status: data.status || "quotation",
         adjustments: data.adjustments || [],
         payment_terms: data.payment_terms || 0,
         validity_days: data.validity_days || 7,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
     };
 
     let { data: bill, error: billError } = await supabase
@@ -189,7 +191,7 @@ export async function createBill(data: {
         return { error: "Failed to create bill items" };
     }
 
-    // 3. Deduct stock for each product belonging to this store
+    // 3. Deduct stock only if not purely quotation or when created directly as paid/draft
     for (const item of data.items) {
         const { data: product } = await supabase
             .from("products")
@@ -214,7 +216,7 @@ export async function createBill(data: {
     return { success: true, billId: bill.id };
 }
 
-export async function updateBillStatus(id: string, status: "draft" | "paid" | "cancelled") {
+export async function updateBillStatus(id: string, status: "quotation" | "draft" | "paid" | "cancelled") {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
@@ -229,9 +231,19 @@ export async function updateBillStatus(id: string, status: "draft" | "paid" | "c
         return { error: "Access denied" };
     }
 
+    const updatePayload: any = {
+        status,
+        updated_at: new Date().toISOString(),
+    };
+
+    // When transitioning to draft (ใบแจ้งหนี้), update created_at to the moment invoice was officially issued
+    if (status === "draft") {
+        updatePayload.created_at = new Date().toISOString();
+    }
+
     const { error } = await supabase
         .from("bills")
-        .update({ status })
+        .update(updatePayload)
         .eq("id", id);
 
     if (error) {
@@ -258,6 +270,10 @@ export async function deleteBill(id: string) {
         return { error: "Access denied" };
     }
 
+    // 1. Delete items first
+    await supabase.from("bill_items").delete().eq("bill_id", id);
+
+    // 2. Delete the bill
     const { error } = await supabase
         .from("bills")
         .delete()

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Trash, Plus, Percent, DollarSign, Globe, Calculator, PlusCircle } from "lucide-react";
+import { Trash, Plus, Percent, DollarSign, Globe, Calculator, PlusCircle, FileText } from "lucide-react";
 import { createBill } from "@/lib/actions/bills";
 import { Product, Customer } from "@/types";
 import { useToast } from "@/hooks/use-toast";
@@ -43,12 +43,15 @@ export function CreateBillDialog({ open: controlledOpen, setOpen: setControlledO
     const { currency: globalCurrency } = useCurrencyStore();
     const [loading, setLoading] = useState(false);
 
+    // Document Type & Initial Status
+    const [docType, setDocType] = useState<"quotation" | "draft" | "paid">("quotation");
+
     // Form states
     const [customerId, setCustomerId] = useState("");
     const [billCurrency, setBillCurrency] = useState<CurrencyCode>((globalCurrency as CurrencyCode) || "THB");
     const [note, setNote] = useState("");
-    const [paymentTerms, setPaymentTerms] = useState<number>(0);
-    const [validityDays, setValidityDays] = useState<number>(7);
+    const [paymentTerms, setPaymentTerms] = useState<number>(0); // อายุการแจ้งหนี้ (วัน)
+    const [validityDays, setValidityDays] = useState<number>(7); // อายุการเสนอราคา (วัน)
     
     // Tax Model: "none" | "exclusive" (คิดเพิ่ม) | "inclusive" (รวมในราคาแล้ว)
     const [taxType, setTaxType] = useState<"none" | "exclusive" | "inclusive">("none");
@@ -140,12 +143,12 @@ export function CreateBillDialog({ open: controlledOpen, setOpen: setControlledO
 
     const handleSubmit = async () => {
         if (!customerId) {
-            toast({ title: "Error", description: "Please select a customer.", variant: "destructive" });
+            toast({ title: "Error", description: "กรุณาเลือกลูกค้า", variant: "destructive" });
             return;
         }
         const validItems = items.filter((i) => i.product_id && i.quantity > 0);
         if (validItems.length === 0) {
-            toast({ title: "Error", description: "Please add at least one product.", variant: "destructive" });
+            toast({ title: "Error", description: "กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ", variant: "destructive" });
             return;
         }
 
@@ -180,6 +183,7 @@ export function CreateBillDialog({ open: controlledOpen, setOpen: setControlledO
         try {
             const result = (await createBill({
                 customer_id: customerId,
+                status: docType,
                 note: note ? `${note}\n[ราคาก่อน VAT: ฿${netBeforeVat.toFixed(2)} | VAT: ฿${vatAmount.toFixed(2)}${whtAmount > 0 ? ` | หัก ณ ที่จ่าย: -฿${whtAmount.toFixed(2)}` : ""}]` : undefined,
                 items: validItems,
                 adjustments: finalAdjustments,
@@ -188,9 +192,10 @@ export function CreateBillDialog({ open: controlledOpen, setOpen: setControlledO
             })) as any;
 
             if (result.success) {
+                const docLabel = docType === "quotation" ? "ใบเสนอราคา" : docType === "draft" ? "ใบแจ้งหนี้" : "ใบเสร็จรับเงิน";
                 toast({
-                    title: "Invoice Created",
-                    description: `Invoice ${formatMoney(finalPayable, billCurrency)} created successfully.`,
+                    title: `สร้าง${docLabel}สำเร็จ`,
+                    description: `ยอดรวม ${formatMoney(finalPayable, billCurrency)} บันทึกเรียบร้อยแล้ว`,
                 });
                 setOpen(false);
                 // Reset
@@ -204,7 +209,7 @@ export function CreateBillDialog({ open: controlledOpen, setOpen: setControlledO
                 toast({ title: "Error", description: result.error, variant: "destructive" });
             }
         } catch {
-            toast({ title: "Error", description: "Failed to issue invoice", variant: "destructive" });
+            toast({ title: "Error", description: "Failed to issue document", variant: "destructive" });
         } finally {
             setLoading(false);
         }
@@ -214,18 +219,64 @@ export function CreateBillDialog({ open: controlledOpen, setOpen: setControlledO
         <Dialog open={open} onOpenChange={setOpen}>
             {!isControlled && (
                 <DialogTrigger asChild>
-                    <Button size="sm" className="h-8 text-xs gap-1.5 font-medium">
+                    <Button size="sm" className="h-8 text-xs gap-1.5 font-medium cursor-pointer">
                         <PlusCircle className="h-3.5 w-3.5" />
-                        ออกบิล / สร้างใบแจ้งหนี้
+                        ออกเอกสาร
                     </Button>
                 </DialogTrigger>
             )}
             <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle className="text-lg font-bold">ออกใบแจ้งหนี้ / ใบกำกับภาษี (Create Invoice)</DialogTitle>
+                    <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-primary" />
+                        ออกเอกสาร (Issue Document)
+                    </DialogTitle>
                 </DialogHeader>
 
                 <div className="grid gap-4 py-3">
+                    {/* Document Type Selector (Status) */}
+                    <div className="p-3 rounded-xl bg-muted/40 border border-border/80 space-y-1.5">
+                        <Label className="text-xs font-bold text-foreground">ประเภทเอกสารที่ต้องการออก (สถานะเริ่มต้น)</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setDocType("quotation")}
+                                className={`p-2.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer text-left ${
+                                    docType === "quotation"
+                                        ? "border-sky-500 bg-sky-500/10 text-sky-700 shadow-2xs font-bold ring-1 ring-sky-500"
+                                        : "border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+                                }`}
+                            >
+                                <p className="leading-tight">ใบเสนอราคา</p>
+                                <span className="text-[10px] font-normal text-muted-foreground">Quotation</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDocType("draft")}
+                                className={`p-2.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer text-left ${
+                                    docType === "draft"
+                                        ? "border-amber-500 bg-amber-500/10 text-amber-700 shadow-2xs font-bold ring-1 ring-amber-500"
+                                        : "border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+                                }`}
+                            >
+                                <p className="leading-tight">ใบแจ้งหนี้</p>
+                                <span className="text-[10px] font-normal text-muted-foreground">Invoice (Pending)</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDocType("paid")}
+                                className={`p-2.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer text-left ${
+                                    docType === "paid"
+                                        ? "border-emerald-500 bg-emerald-500/10 text-emerald-700 shadow-2xs font-bold ring-1 ring-emerald-500"
+                                        : "border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+                                }`}
+                            >
+                                <p className="leading-tight">ใบเสร็จรับเงิน</p>
+                                <span className="text-[10px] font-normal text-muted-foreground">Receipt / Paid</span>
+                            </button>
+                        </div>
+                    </div>
+
                     {/* Header Info */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="grid gap-1.5">
@@ -261,27 +312,33 @@ export function CreateBillDialog({ open: controlledOpen, setOpen: setControlledO
                         </div>
                     </div>
 
+                    {/* Validity and Terms */}
                     <div className="grid grid-cols-2 gap-3">
                         <div className="grid gap-1.5">
-                            <Label htmlFor="payment_terms" className="text-xs font-semibold">เงื่อนไขการชำระเงิน (เครดิตวัน)</Label>
-                            <Input
-                                id="payment_terms"
-                                type="number"
-                                min={0}
-                                value={paymentTerms}
-                                onChange={(e) => setPaymentTerms(parseInt(e.target.value) || 0)}
-                                placeholder="0 = ชำระทันที"
-                                className="h-9 text-xs"
-                            />
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="validity_days" className="text-xs font-semibold">อายุเอกสาร (วัน)</Label>
+                            <Label htmlFor="validity_days" className="text-xs font-semibold">
+                                อายุการเสนอราคา (วัน)
+                            </Label>
                             <Input
                                 id="validity_days"
                                 type="number"
                                 min={1}
                                 value={validityDays}
                                 onChange={(e) => setValidityDays(parseInt(e.target.value) || 7)}
+                                placeholder="เช่น 7 วัน, 15 วัน, 30 วัน"
+                                className="h-9 text-xs"
+                            />
+                        </div>
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="payment_terms" className="text-xs font-semibold">
+                                อายุการแจ้งหนี้ / กำหนดชำระ (วัน)
+                            </Label>
+                            <Input
+                                id="payment_terms"
+                                type="number"
+                                min={0}
+                                value={paymentTerms}
+                                onChange={(e) => setPaymentTerms(parseInt(e.target.value) || 0)}
+                                placeholder="เช่น 0 = ชำระทันที, 30 วัน"
                                 className="h-9 text-xs"
                             />
                         </div>
@@ -390,7 +447,7 @@ export function CreateBillDialog({ open: controlledOpen, setOpen: setControlledO
                                 variant="ghost"
                                 size="sm"
                                 onClick={addAdjustment}
-                                className="h-7 text-xs text-primary hover:bg-primary/10 gap-1"
+                                className="h-7 text-xs text-primary hover:bg-primary/10 gap-1 cursor-pointer"
                             >
                                 <Percent className="h-3 w-3" /> + เพิ่มส่วนลด / ค่าจัดส่ง
                             </Button>
@@ -485,11 +542,11 @@ export function CreateBillDialog({ open: controlledOpen, setOpen: setControlledO
                 </div>
 
                 <DialogFooter>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)} className="h-8 text-xs">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)} className="h-8 text-xs cursor-pointer">
                         ยกเลิก
                     </Button>
-                    <Button onClick={handleSubmit} disabled={loading} size="sm" className="h-8 text-xs font-semibold bg-primary text-primary-foreground">
-                        {loading ? "กำลังบันทึก..." : "ออกเอกสารบิล"}
+                    <Button onClick={handleSubmit} disabled={loading} size="sm" className="h-8 text-xs font-semibold bg-primary text-primary-foreground cursor-pointer">
+                        {loading ? "กำลังบันทึก..." : `ออก${docType === "quotation" ? "ใบเสนอราคา" : docType === "draft" ? "ใบแจ้งหนี้" : "ใบเสร็จรับเงิน"}`}
                     </Button>
                 </DialogFooter>
             </DialogContent>
