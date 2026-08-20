@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, Sparkles, UserPlus, KeyRound, Shield, ShieldCheck } from "lucide-react";
+import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, Sparkles, UserPlus, KeyRound, Shield, ShieldCheck, MapPin } from "lucide-react";
 import Link from "next/link";
 import { switchActiveStore } from "@/lib/actions/profile";
 import { joinStoreWithCode } from "@/app/actions/team";
@@ -288,9 +288,9 @@ export function StoreBranchDropdown({
                 </PopoverContent>
             </Popover>
 
-            {/* Modal 1: Switch Store Dialog */}
+            {/* Modal 1: Switch Store Dialog (Shows stores, roles, and branch info) */}
             <Dialog open={switchStoreOpen} onOpenChange={setSwitchStoreOpen}>
-                <DialogContent className="sm:max-w-[420px]">
+                <DialogContent className="sm:max-w-[480px]">
                     <DialogHeader>
                         <div className="flex items-center gap-2">
                             <div className="p-2 rounded-xl bg-primary/10 text-primary">
@@ -299,18 +299,19 @@ export function StoreBranchDropdown({
                             <div>
                                 <DialogTitle className="text-base font-semibold">เลือกและสลับร้านค้า</DialogTitle>
                                 <DialogDescription className="text-xs text-muted-foreground">
-                                    คุณมีร้านค้าทั้งหมด {stores.length} ร้าน
+                                    คุณมีร้านค้าและสาขาที่สามารถเข้าทำงานได้ทั้งหมด {stores.length} ร้าน
                                 </DialogDescription>
                             </div>
                         </div>
                     </DialogHeader>
 
-                    <div className="space-y-2 py-3 max-h-[260px] overflow-y-auto">
+                    <div className="space-y-2.5 py-3 max-h-[320px] overflow-y-auto pr-1">
                         {stores.map((s) => {
                             const isCurrent = s.id === activeStoreId || s.store_name === storeName;
                             const isSwitching = switchingStoreId === s.id;
                             const storeRole = s.user_role || (s.owner_id === s.id ? "owner" : "owner");
                             const badge = roleLabels[storeRole] || roleLabels.owner;
+                            const storeBranches = s.branches || [];
 
                             return (
                                 <button
@@ -318,42 +319,59 @@ export function StoreBranchDropdown({
                                     type="button"
                                     onClick={() => handleSelectStore(s)}
                                     disabled={isCurrent || !!switchingStoreId}
-                                    className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
+                                    className={`w-full flex flex-col p-3 rounded-xl border text-left transition-all space-y-2 ${
                                         isCurrent
                                             ? "border-primary/40 bg-primary/5 text-foreground shadow-2xs"
                                             : "border-border/80 hover:border-primary/40 hover:bg-muted/40 text-foreground cursor-pointer"
                                     }`}
                                 >
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0 overflow-hidden">
-                                            {s.avatar_url ? (
-                                                <img src={s.avatar_url} alt="" className="w-full h-full object-cover" />
-                                            ) : (
-                                                s.store_name?.charAt(0)?.toUpperCase() || "S"
-                                            )}
-                                        </div>
-                                        <div className="flex flex-col min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-xs font-bold truncate">{s.store_name}</span>
-                                                <span className={`text-[8px] font-semibold px-1 rounded border ${badge.color}`}>
-                                                    {badge.label}
+                                    <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0 overflow-hidden">
+                                                {s.avatar_url ? (
+                                                    <img src={s.avatar_url} alt="" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    s.store_name?.charAt(0)?.toUpperCase() || "S"
+                                                )}
+                                            </div>
+                                            <div className="flex flex-col min-w-0">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-xs font-bold truncate">{s.store_name}</span>
+                                                    <span className={`text-[8px] font-semibold px-1.5 py-0.2 rounded border ${badge.color}`}>
+                                                        {badge.label}
+                                                    </span>
+                                                </div>
+                                                <span className="text-[10px] text-muted-foreground truncate">
+                                                    {s.tax_id ? `Tax ID: ${s.tax_id}` : s.store_address || "ร้านค้าของคุณ"}
                                                 </span>
                                             </div>
-                                            <span className="text-[10px] text-muted-foreground truncate">
-                                                {s.tax_id ? `Tax ID: ${s.tax_id}` : s.store_address || "ร้านค้าของคุณ"}
-                                            </span>
                                         </div>
+
+                                        {isSwitching ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+                                        ) : isCurrent ? (
+                                            <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 shrink-0">
+                                                ใช้งานอยู่
+                                            </span>
+                                        ) : (
+                                            <span className="text-[10px] text-muted-foreground hover:text-foreground font-semibold shrink-0">
+                                                สลับร้าน →
+                                            </span>
+                                        )}
                                     </div>
-                                    {isSwitching ? (
-                                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                                    ) : isCurrent ? (
-                                        <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                                            ใช้งานอยู่
-                                        </span>
-                                    ) : (
-                                        <span className="text-[10px] text-muted-foreground hover:text-foreground">
-                                            เลือก
-                                        </span>
+
+                                    {/* Branches Preview for this store */}
+                                    {storeBranches.length > 0 && (
+                                        <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-border/50">
+                                            <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                                                <Building2 className="h-2.5 w-2.5 text-primary" /> สาขา:
+                                            </span>
+                                            {storeBranches.map((b: any) => (
+                                                <span key={b.id} className="text-[9px] bg-muted/60 text-foreground px-1.5 py-0.2 rounded border border-border/60">
+                                                    {b.name}
+                                                </span>
+                                            ))}
+                                        </div>
                                     )}
                                 </button>
                             );
@@ -375,20 +393,18 @@ export function StoreBranchDropdown({
                             ใส่รหัสเข้าร่วมร้าน
                         </Button>
 
-                        {userRole === "owner" && (
-                            <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => {
-                                    setSwitchStoreOpen(false);
-                                    setCreateStoreOpen(true);
-                                }}
-                                className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
-                            >
-                                <Plus className="h-3.5 w-3.5" />
-                                สร้างร้านใหม่
-                            </Button>
-                        )}
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                                setSwitchStoreOpen(false);
+                                setCreateStoreOpen(true);
+                            }}
+                            className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
+                        >
+                            <Plus className="h-3.5 w-3.5" />
+                            สร้างร้านใหม่
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

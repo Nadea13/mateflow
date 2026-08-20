@@ -166,7 +166,6 @@ export async function getStoreProfile(storeId?: string) {
     };
 }
 
-// Backward compatibility
 export async function getProfile(storeId?: string) {
     return getStoreProfile(storeId);
 }
@@ -195,32 +194,50 @@ export async function getStores() {
 
     if (!user) return [];
 
-    // 1. Owned stores
+    // 1. Stores owned by user (with branches)
     const { data: ownedStores } = await supabase
         .from("stores")
-        .select("*")
+        .select(`
+            *,
+            branchs:branchs ( id, name, code, type, address )
+        `)
         .eq("owner_id", user.id)
         .order("created_at", { ascending: true });
 
-    // 2. Member stores (where user is employee)
+    // 2. Stores where user is a team member
     const { data: memberStores } = await supabase
         .from("store_team_members")
         .select(`
             role,
             assigned_branch_id,
-            store:stores ( * )
+            store:stores (
+                *,
+                branchs:branchs ( id, name, code, type, address )
+            )
         `)
         .eq("user_id", user.id);
 
-    const allStores: any[] = [...(ownedStores || [])];
+    const allStores: any[] = (ownedStores || []).map(s => ({
+        ...s,
+        user_role: "owner",
+        branches: s.branchs || [],
+    }));
 
     if (memberStores && memberStores.length > 0) {
         for (const ms of memberStores) {
             if (ms.store && !allStores.some(s => s.id === (ms.store as any).id)) {
+                const storeData: any = ms.store;
+                // Filter branches if assigned to specific branch
+                const rawBranches = storeData.branchs || [];
+                const accessibleBranches = ms.assigned_branch_id
+                    ? rawBranches.filter((b: any) => b.id === ms.assigned_branch_id)
+                    : rawBranches;
+
                 allStores.push({
-                    ...(ms.store as any),
+                    ...storeData,
                     user_role: ms.role,
                     assigned_branch_id: ms.assigned_branch_id,
+                    branches: accessibleBranches,
                 });
             }
         }
@@ -249,7 +266,6 @@ export async function createNewStore(data: {
         return { error: "User session expired. Please sign in again." };
     }
 
-    // 1. Always insert a BRAND NEW store row
     const storePayload: any = {
         owner_id: user.id,
         store_name: data.store_name,
@@ -276,7 +292,6 @@ export async function createNewStore(data: {
         return { error: error.message || "Failed to create new store" };
     }
 
-    // 2. Create the initial branch for this brand new store
     const finalBranchName = data.branch_name?.trim() || `${data.store_name} (สาขาหลัก)`;
     const finalBranchCode = data.branch_code?.trim() || "HQ-01";
     const finalBranchType = data.branch_type || "warehouse";
@@ -301,7 +316,6 @@ export async function createNewStore(data: {
         });
     }
 
-    // 3. Automatically set this newly created store as active in cookie
     cookieStore.set("active_store_id", newStore.id, {
         path: "/",
         maxAge: 60 * 60 * 24 * 365,
