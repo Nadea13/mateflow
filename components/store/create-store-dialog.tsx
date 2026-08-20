@@ -10,7 +10,7 @@ import { ImageUploadZone } from "@/components/ui/image-upload-zone";
 import { updateProfile } from "@/lib/actions/profile";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Store, Loader2, FileCheck2, PenTool } from "lucide-react";
+import { Store, Loader2, FileCheck2, PenTool, Image as ImageIcon } from "lucide-react";
 
 interface CreateStoreDialogProps {
     open: boolean;
@@ -23,6 +23,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
     const [storePhone, setStorePhone] = useState("");
     const [taxId, setTaxId] = useState("");
     const [storeAddress, setStoreAddress] = useState("");
+    const [avatarUrl, setAvatarUrl] = useState("");
     const [signatureUrl, setSignatureUrl] = useState("");
     const router = useRouter();
 
@@ -40,6 +41,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                 store_phone: storePhone.trim(),
                 tax_id: taxId.trim(),
                 store_address: storeAddress.trim(),
+                avatar_url: avatarUrl || undefined,
                 signature_url: signatureUrl || undefined,
             }) as any;
 
@@ -59,7 +61,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <div className="flex items-center gap-2.5">
@@ -69,7 +71,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             <div>
                                 <DialogTitle className="text-base font-bold">สร้างร้านค้าใหม่</DialogTitle>
                                 <DialogDescription className="text-xs">
-                                    กรอกข้อมูลร้านค้า เลขประจำตัวผู้เสียภาษี และรูปลายเซ็นต์เพื่อเริ่มใช้งาน
+                                    กรอกข้อมูลร้านค้า โลโก้ร้าน เลขประจำตัวผู้เสียภาษี และรูปลายเซ็นต์
                                 </DialogDescription>
                             </div>
                         </div>
@@ -86,6 +88,21 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                 onChange={(e) => setStoreName(e.target.value)}
                                 className="h-9 text-xs"
                                 required
+                            />
+                        </div>
+
+                        {/* Store Logo Upload (Cloudflare R2) */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                                <ImageIcon className="h-3.5 w-3.5 text-primary" />
+                                <Label className="text-xs font-semibold">โลโก้ร้านค้า (Store Logo / Avatar)</Label>
+                            </div>
+                            <ImageUploadZone
+                                value={avatarUrl}
+                                onChange={(url) => setAvatarUrl(url)}
+                                folder="avatars"
+                                label=""
+                                className="w-full"
                             />
                         </div>
 
@@ -129,7 +146,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             />
                         </div>
 
-                        {/* Authorized Signature Upload (Using Cloudflare R2) */}
+                        {/* Authorized Signature Upload (Cloudflare R2) */}
                         <div className="space-y-1.5 border-t border-border/60 pt-3">
                             <div className="flex items-center gap-1.5 mb-1">
                                 <PenTool className="h-3.5 w-3.5 text-primary" />

@@ -130,6 +130,7 @@ export async function updateProfile(data: {
     store_address?: string; 
     tax_id?: string; 
     store_phone?: string;
+    avatar_url?: string;
     signature_url?: string;
 }) {
     const cookieStore = await cookies();
@@ -147,6 +148,7 @@ export async function updateProfile(data: {
     if (data.store_address !== undefined) updatePayload.store_address = data.store_address;
     if (data.tax_id !== undefined) updatePayload.tax_id = data.tax_id;
     if (data.store_phone !== undefined) updatePayload.store_phone = data.store_phone;
+    if (data.avatar_url !== undefined) updatePayload.avatar_url = data.avatar_url;
     if (data.signature_url !== undefined) updatePayload.signature_url = data.signature_url;
 
     const { error } = await supabase
