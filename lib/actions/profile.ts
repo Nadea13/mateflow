@@ -137,10 +137,13 @@ export async function updateProfile(data: {
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) return { error: "Unauthorized" };
+    if (!user) {
+        return { error: "User session expired. Please sign in again." };
+    }
 
     const updatePayload: any = {
         id: user.id,
+        email: user.email || undefined,
         updated_at: new Date().toISOString(),
     };
 
@@ -151,13 +154,26 @@ export async function updateProfile(data: {
     if (data.avatar_url !== undefined) updatePayload.avatar_url = data.avatar_url;
     if (data.signature_url !== undefined) updatePayload.signature_url = data.signature_url;
 
+    // Check if profile exists, if not include default fields
+    const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+    if (!existingProfile) {
+        updatePayload.role = "owner";
+        updatePayload.default_currency = "THB";
+        updatePayload.country = "TH";
+    }
+
     const { error } = await supabase
         .from("profiles")
-        .upsert(updatePayload);
+        .upsert(updatePayload, { onConflict: "id" });
 
     if (error) {
-        console.error("Error updating profile:", error);
-        return { error: "Failed to update profile" };
+        console.error("Supabase updateProfile error:", error);
+        return { error: error.message || "Failed to update profile" };
     }
 
     revalidatePath("/dashboard/settings");
