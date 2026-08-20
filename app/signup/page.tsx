@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { GoogleAuthButton } from "@/components/auth/google-auth-button";
 import { OtpAuthForm } from "@/components/auth/otp-auth-form";
 import { Shield } from "lucide-react";
+import { MateFlowIcon } from "@/components/brand/mateflow-logo";
 
 export default function SignUpPage() {
     return (
@@ -10,11 +11,12 @@ export default function SignUpPage() {
             <div className="w-full max-w-md space-y-6">
                 {/* Brand Header */}
                 <div className="flex flex-col items-center justify-center text-center space-y-2">
-                    <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl shadow-xs">
-                        M
+                    <div className="p-2.5 rounded-2xl bg-card border border-border/80 shadow-md flex items-center justify-center mb-1">
+                        <MateFlowIcon size={38} />
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                        Mateflow
+                    <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-1">
+                        <span>Mate</span>
+                        <span className="text-primary font-extrabold">Flow</span>
                     </h1>
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Shield className="h-3.5 w-3.5 text-primary inline" /> Global Enterprise Backoffice

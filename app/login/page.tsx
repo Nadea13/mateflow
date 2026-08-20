@@ -12,6 +12,7 @@ import { signIn } from "@/lib/actions/auth";
 import { Shield, Mail, Lock, Eye, EyeOff, ArrowRight, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { TurnstileWidget } from "@/components/cloudflare/turnstile-widget";
+import { MateFlowIcon } from "@/components/brand/mateflow-logo";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -51,11 +52,12 @@ export default function LoginPage() {
             <div className="w-full max-w-md space-y-6">
                 {/* Brand Header */}
                 <div className="flex flex-col items-center justify-center text-center space-y-2">
-                    <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl shadow-xs">
-                        M
+                    <div className="p-2.5 rounded-2xl bg-card border border-border/80 shadow-md flex items-center justify-center mb-1">
+                        <MateFlowIcon size={38} />
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                        Mateflow
+                    <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-1">
+                        <span>Mate</span>
+                        <span className="text-primary font-extrabold">Flow</span>
                     </h1>
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Shield className="h-3.5 w-3.5 text-primary inline" /> Global Enterprise Backoffice
@@ -66,25 +68,22 @@ export default function LoginPage() {
                 <Card className="border border-border bg-card shadow-sm rounded-xl">
                     <CardHeader className="space-y-1 pb-4">
                         <CardTitle className="text-xl font-bold text-center">
-                            Sign In to Your Account
+                            Sign In to Mateflow
                         </CardTitle>
                         <CardDescription className="text-center text-xs text-muted-foreground">
-                            Enter your email and password to access the backoffice.
+                            Enter your email and password to access your dashboard.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {errorMsg && (
-                            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-center gap-2">
-                                <span>⚠️</span>
-                                <span>{errorMsg}</span>
+                            <div className="p-3 text-xs rounded-lg bg-destructive/10 border border-destructive/20 text-destructive font-medium">
+                                {errorMsg}
                             </div>
                         )}
 
                         <form onSubmit={handleLogin} className="space-y-4">
                             <div className="space-y-1.5">
-                                <Label htmlFor="email" className="text-xs font-semibold text-foreground">
-                                    Business Email
-                                </Label>
+                                <Label htmlFor="email" className="text-xs font-semibold">Email Address</Label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                                     <Input
@@ -93,18 +92,20 @@ export default function LoginPage() {
                                         placeholder="name@company.com"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
+                                        className="pl-9 h-10 text-xs bg-background"
                                         required
-                                        className="h-10 pl-9 text-sm bg-card border-border"
+                                        disabled={isPending}
                                     />
                                 </div>
                             </div>
 
                             <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                    <Label htmlFor="password" className="text-xs font-semibold text-foreground">
-                                        Password
-                                    </Label>
-                                    <Link href="/signup" className="text-[11px] text-primary hover:underline">
+                                    <Label htmlFor="password" className="text-xs font-semibold">Password</Label>
+                                    <Link
+                                        href="/signup"
+                                        className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                                    >
                                         Forgot password?
                                     </Link>
                                 </div>
@@ -116,30 +117,38 @@ export default function LoginPage() {
                                         placeholder="••••••••"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
+                                        className="pl-9 pr-9 h-10 text-xs bg-background"
                                         required
-                                        className="h-10 pl-9 pr-9 text-sm bg-card border-border"
+                                        disabled={isPending}
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowPassword(!showPassword)}
                                         className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                                     >
-                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                        {showPassword ? (
+                                            <EyeOff className="h-4 w-4" />
+                                        ) : (
+                                            <Eye className="h-4 w-4" />
+                                        )}
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Cloudflare Turnstile Box (ยืนยันว่าคุณเป็นมนุษย์) */}
+                            {/* Cloudflare Turnstile CAPTCHA Widget */}
                             <TurnstileWidget onSuccess={(token) => setTurnstileToken(token)} />
 
-                            <Button type="submit" disabled={isPending} className="w-full h-10 gap-2 font-medium shadow-xs">
+                            <Button
+                                type="submit"
+                                className="w-full h-10 text-xs font-bold gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                                disabled={isPending}
+                            >
                                 {isPending ? (
-                                    <>
-                                        <RefreshCw className="h-4 w-4 animate-spin" /> Signing In...
-                                    </>
+                                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                                 ) : (
                                     <>
-                                        Sign In to Dashboard <ArrowRight className="h-4 w-4" />
+                                        Sign In
+                                        <ArrowRight className="h-3.5 w-3.5" />
                                     </>
                                 )}
                             </Button>
@@ -162,7 +171,7 @@ export default function LoginPage() {
                         <p className="text-xs text-muted-foreground">
                             Don&apos;t have an account?{" "}
                             <Link href="/signup" className="font-semibold text-primary hover:underline">
-                                Register via Email OTP
+                                Register with Email OTP
                             </Link>
                         </p>
                     </CardFooter>
