@@ -14,53 +14,27 @@ export async function getUserProfile() {
 
     if (!user) return null;
 
-    // 1. Fetch user profile from public.users table
+    // Fetch user profile from public.users table
     let { data: dbUser } = await supabase
         .from("users")
         .select("*")
         .eq("id", user.id)
         .maybeSingle();
 
-    // 2. Fetch all valid stores this user has legitimate access to (owned or member)
     const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
-
-    const activeStoreIdCookie = cookieStore.get("active_store_id")?.value;
-    let activeStore: any = null;
-
-    if (activeStoreIdCookie && validStoreIds.includes(activeStoreIdCookie)) {
-        activeStore = validStores.find(s => s.id === activeStoreIdCookie);
-    } else {
-        // Default to the first store the user owns or belongs to
-        activeStore = validStores[0] || null;
-    }
-
-    if (!activeStore) {
-        return {
-            id: user.id,
-            email: user.email || dbUser?.email || "",
-            store_name: "ร้านค้าของคุณ",
-            avatar_url: dbUser?.avatar_url || "",
-            owner_id: user.id,
-            role: "owner",
-            default_currency: "THB",
-            country: "TH",
-            tax_rate: 7,
-            updated_at: new Date().toISOString(),
-        } as Profile;
-    }
+    const store = validStores[0] || null;
 
     return {
         id: user.id,
         email: user.email || dbUser?.email || "",
-        store_name: activeStore.store_name || "",
-        avatar_url: activeStore.avatar_url || dbUser?.avatar_url || "",
-        owner_id: activeStore.owner_id || user.id,
-        role: activeStore.user_role || (activeStore.owner_id === user.id ? "owner" : "sales"),
-        default_currency: activeStore.default_currency || "THB",
-        country: activeStore.country || "TH",
-        tax_rate: activeStore.tax_rate || 7,
-        updated_at: activeStore.updated_at || new Date().toISOString(),
+        store_name: store?.store_name || "",
+        avatar_url: store?.avatar_url || dbUser?.avatar_url || "",
+        owner_id: store?.owner_id || user.id,
+        role: store?.user_role || (store?.owner_id === user.id ? "owner" : "sales"),
+        default_currency: store?.default_currency || "THB",
+        country: store?.country || "TH",
+        tax_rate: store?.tax_rate || 7,
+        updated_at: store?.updated_at || new Date().toISOString(),
     } as Profile;
 }
 
@@ -102,16 +76,32 @@ export async function getStoreProfile(storeId?: string) {
 
     if (targetStoreId && validStoreIds.includes(targetStoreId)) {
         store = validStores.find(s => s.id === targetStoreId);
-    } else {
-        store = validStores[0] || null;
+    } else if (validStores.length > 0) {
+        store = validStores[0];
     }
 
-    if (!store) return null;
+    // Fallback: If user has no store at all, provide an in-memory default store so page never crashes/redirects
+    if (!store) {
+        return {
+            id: user.id,
+            owner_id: user.id,
+            store_name: "ร้านค้าของฉัน",
+            avatar_url: "",
+            store_address: "",
+            tax_id: "",
+            signature_url: "",
+            store_phone: "",
+            role: "owner",
+            etax_enabled: false,
+            etax_api_key: "",
+            etax_company_id: "",
+        };
+    }
 
     return {
         id: store.id,
         owner_id: store.owner_id || user.id,
-        store_name: store.store_name || "",
+        store_name: store.store_name || "ร้านค้าของฉัน",
         avatar_url: store.avatar_url || "",
         store_address: store.store_address || "",
         tax_id: store.tax_id || "",
@@ -124,6 +114,7 @@ export async function getStoreProfile(storeId?: string) {
     };
 }
 
+// Backward compatibility
 export async function getProfile(storeId?: string) {
     return getStoreProfile(storeId);
 }
@@ -173,11 +164,17 @@ export async function getStores() {
         .eq("owner_id", user.id)
         .order("created_at", { ascending: true });
 
-    // 2. Stores where user is a team member
-    const { data: memberRows } = await supabase
-        .from("store_team_members")
-        .select("role, store_id")
-        .eq("user_id", user.id);
+    // 2. Stores where user is a team member (wrapped in safe try-catch in case table is fresh)
+    let memberRows: any[] = [];
+    try {
+        const { data: members } = await supabase
+            .from("store_team_members")
+            .select("role, store_id")
+            .eq("user_id", user.id);
+        if (members) memberRows = members;
+    } catch (e) {
+        console.warn("store_team_members query warning:", e);
+    }
 
     const allStores: any[] = (ownedStores || []).map(s => ({
         ...s,
@@ -258,6 +255,7 @@ export async function createNewStore(data: {
         return { error: error.message || "Failed to create new store" };
     }
 
+    // Create the initial branch for this store
     const finalBranchName = data.branch_name?.trim() || `${data.store_name} (สาขาหลัก)`;
     const finalBranchCode = data.branch_code?.trim() || "HQ-01";
     const finalBranchType = data.branch_type || "warehouse";
@@ -272,16 +270,13 @@ export async function createNewStore(data: {
         address: finalBranchAddress,
     };
 
-    let branchRes = await supabase.from("branchs").insert(branchPayload);
-
-    if (branchRes.error) {
-        console.warn("Retrying branch insertion into branchs with fallback:", branchRes.error);
-        await supabase.from("branchs").insert({
-            ...branchPayload,
-            user_id: user.id,
-        });
+    try {
+        await supabase.from("branchs").insert(branchPayload);
+    } catch (bErr) {
+        console.warn("Error inserting initial branch:", bErr);
     }
 
+    // Automatically set this newly created store as active in cookie
     cookieStore.set("active_store_id", newStore.id, {
         path: "/",
         maxAge: 60 * 60 * 24 * 365,
@@ -313,20 +308,15 @@ export async function updateProfile(data: {
         return { error: "User session expired. Please sign in again." };
     }
 
-    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
-    if (!targetStoreId) {
-        const { data: existingStore } = await supabase
-            .from("stores")
-            .select("id")
-            .eq("owner_id", user.id)
-            .order("created_at", { ascending: true })
-            .maybeSingle();
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
 
-        if (existingStore) {
-            targetStoreId = existingStore.id;
-        }
+    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        targetStoreId = validStoreIds[0];
     }
 
+    // If no store exists in DB yet, create one
     if (!targetStoreId) {
         return createNewStore({
             store_name: data.store_name || "My Store",
@@ -352,8 +342,7 @@ export async function updateProfile(data: {
     const { error } = await supabase
         .from("stores")
         .update(updatePayload)
-        .eq("id", targetStoreId)
-        .eq("owner_id", user.id);
+        .eq("id", targetStoreId);
 
     if (error) {
         console.error("Supabase updateStore error:", error);
@@ -367,51 +356,32 @@ export async function updateProfile(data: {
     return { success: true, store_id: targetStoreId };
 }
 
-export async function getTeamMembers(storeId?: string) {
+export async function getTeamMembers() {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) return [];
 
-    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+    try {
+        const { data, error } = await supabase
+            .from("team_members")
+            .select("*")
+            .order("created_at", { ascending: false });
 
-    let query = supabase
-        .from("store_team_members")
-        .select(`
-            id,
-            role,
-            created_at,
-            user:users ( id, email, full_name, avatar_url )
-        `)
-        .order("created_at", { ascending: false });
+        if (error) {
+            return [];
+        }
 
-    if (targetStoreId) {
-        query = query.eq("store_id", targetStoreId);
+        return data || [];
+    } catch {
+        return [];
     }
-
-    const { data, error } = await query;
-
-    if (error || !data) {
-        const fallback = await supabase.from("team_members").select("*");
-        return fallback.data || [];
-    }
-
-    return data.map((tm: any) => ({
-        id: tm.id,
-        role: tm.role,
-        email: tm.user?.email || "",
-        name: tm.user?.full_name || "",
-        avatar_url: tm.user?.avatar_url || "",
-        created_at: tm.created_at,
-    }));
 }
 
 export async function signOutUser() {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
-    // Clear active store cookie on logout
-    cookieStore.delete("active_store_id");
     await supabase.auth.signOut();
     redirect("/login");
 }
@@ -427,22 +397,19 @@ export async function updateETaxSettings(data: { etax_enabled: boolean; etax_api
 
     if (!user) return { error: "Unauthorized" };
 
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
     const activeStoreId = cookieStore.get("active_store_id")?.value;
+    const targetStoreId = activeStoreId && validStoreIds.includes(activeStoreId) ? activeStoreId : validStoreIds[0];
 
-    let query = supabase.from("stores").update({
+    if (!targetStoreId) return { error: "Store not found" };
+
+    const { error } = await supabase.from("stores").update({
         etax_enabled: data.etax_enabled,
         etax_api_key: data.etax_api_key,
         etax_company_id: data.etax_company_id,
         updated_at: new Date().toISOString(),
-    });
-
-    if (activeStoreId) {
-        query = query.eq("id", activeStoreId);
-    } else {
-        query = query.eq("owner_id", user.id);
-    }
-
-    const { error } = await query;
+    }).eq("id", targetStoreId);
 
     if (error) {
         console.error("Error updating E-Tax settings:", error);
@@ -460,21 +427,18 @@ export async function updateStripeKeys(data: { stripe_publishable_key?: string; 
 
     if (!user) return { error: "Unauthorized" };
 
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
     const activeStoreId = cookieStore.get("active_store_id")?.value;
+    const targetStoreId = activeStoreId && validStoreIds.includes(activeStoreId) ? activeStoreId : validStoreIds[0];
 
-    let query = supabase.from("stores").update({
+    if (!targetStoreId) return { error: "Store not found" };
+
+    const { error } = await supabase.from("stores").update({
         stripe_publishable_key: data.stripe_publishable_key,
         stripe_secret_key: data.stripe_secret_key,
         updated_at: new Date().toISOString(),
-    });
-
-    if (activeStoreId) {
-        query = query.eq("id", activeStoreId);
-    } else {
-        query = query.eq("owner_id", user.id);
-    }
-
-    const { error } = await query;
+    }).eq("id", targetStoreId);
 
     if (error) {
         console.error("Error updating Stripe keys:", error);
@@ -492,17 +456,23 @@ export async function deleteAccount() {
 
     if (!user) return { error: "Unauthorized" };
 
-    await supabase.from("bills").delete().eq("store_id", user.id);
-    await supabase.from("expenses").delete().eq("store_id", user.id);
-    await supabase.from("products").delete().eq("store_id", user.id);
-    await supabase.from("customers").delete().eq("store_id", user.id);
-    await supabase.from("suppliers").delete().eq("store_id", user.id);
-    await supabase.from("purchase_orders").delete().eq("store_id", user.id);
-    await supabase.from("branchs").delete().eq("store_id", user.id);
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
 
-    await supabase.from("stores").delete().eq("owner_id", user.id);
+    if (validStoreIds.length > 0) {
+        for (const storeId of validStoreIds) {
+            await supabase.from("bills").delete().eq("store_id", storeId);
+            await supabase.from("expenses").delete().eq("store_id", storeId);
+            await supabase.from("products").delete().eq("store_id", storeId);
+            await supabase.from("customers").delete().eq("store_id", storeId);
+            await supabase.from("suppliers").delete().eq("store_id", storeId);
+            await supabase.from("purchase_orders").delete().eq("store_id", storeId);
+            await supabase.from("branchs").delete().eq("store_id", storeId);
+            await supabase.from("stores").delete().eq("id", storeId);
+        }
+    }
+
     await supabase.from("users").delete().eq("id", user.id);
-
     await supabase.auth.signOut();
     redirect("/login");
 }
