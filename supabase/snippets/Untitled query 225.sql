@@ -20,7 +20,7 @@ BEGIN
     END IF;
 END $$;
 
--- 2. ปรับฟังก์ชัน generate_store_code ให้เรียบง่าย (ไม่ต้องระบุสาขา)
+-- 2. ปรับปรุงฟังก์ชัน generate_store_code (ตัดการรับค่าสาขาออก)
 CREATE OR REPLACE FUNCTION public.generate_store_code(
     p_role text DEFAULT 'sales',
     p_store_id uuid DEFAULT NULL
@@ -60,7 +60,7 @@ BEGIN
 END;
 $$;
 
--- 3. ปรับฟังก์ชัน join_store_by_code
+-- 3. ปรับปรุงฟังก์ชัน join_store_by_code (ตัดการบันทึกสาขาออก)
 CREATE OR REPLACE FUNCTION public.join_store_by_code(p_code text)
 RETURNS json
 LANGUAGE plpgsql

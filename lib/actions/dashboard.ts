@@ -1,7 +1,8 @@
-"use server";
+﻿"use server";
 
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
+import { getStores } from "@/lib/actions/profile";
 
 // Helper to determine range parameters
 function getRangeParams(range: string) {
@@ -65,87 +66,99 @@ function getRangeParams(range: string) {
 }
 
 // Helper to fetch and process chart data
-async function getChartData(supabase: any, range: string, type: "sales" | "profit") {
+async function getChartData(supabase: any, range: string, type: "sales" | "profit", storeId: string) {
     const { startDate, dataPoints, dateFormat } = getRangeParams(range);
 
-    // Fetch bills
+    if (!storeId) return [];
+
+    // Fetch bills scoped to storeId
     const { data: bills } = await supabase
         .from("bills")
         .select("created_at, total_amount")
+        .eq("store_id", storeId)
         .neq("status", "cancelled")
         .gte("created_at", startDate.toISOString())
         .order("created_at", { ascending: true });
 
-    // Fetch expenses if profit
+    // Fetch expenses if profit scoped to storeId
     let expenses: any[] = [];
     if (type === "profit") {
-        const { data } = await supabase
+        const { data: exp } = await supabase
             .from("expenses")
-            .select("date, amount, created_at")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
-        expenses = data || [];
+            .select("date, amount")
+            .eq("store_id", storeId)
+            .gte("date", startDate.toISOString().split("T")[0])
+            .order("date", { ascending: true });
+        expenses = exp || [];
     }
 
     const chartData = [];
 
     if (dateFormat === "hour") {
-        for (let i = 0; i < 24; i++) {
-            const d = new Date(startDate);
-            d.setHours(i);
-            const hourPrefix = d.toISOString().slice(0, 13);
-            const displayTime = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-            const hourSales = bills?.filter((b: any) => b.created_at.startsWith(hourPrefix))
-                .reduce((sum: number, b: any) => sum + Number(b.total_amount), 0) || 0;
+        for (let i = 0; i < 24; i++) {
+            const hourDate = new Date(today);
+            hourDate.setHours(i);
+
+            const nextHourDate = new Date(today);
+            nextHourDate.setHours(i + 1);
+
+            const hourSales = bills?.filter((b: any) => {
+                const bDate = new Date(b.created_at);
+                return bDate >= hourDate && bDate < nextHourDate;
+            }).reduce((sum: number, b: any) => sum + Number(b.total_amount), 0) || 0;
+
+            const name = `${i.toString().padStart(2, "0")}:00`;
 
             if (type === "sales") {
-                chartData.push({ name: displayTime, total: hourSales });
+                chartData.push({ name, total: hourSales });
             } else {
-                const hourExpenses = expenses?.filter((e: any) => e.created_at.startsWith(hourPrefix))
-                    .reduce((sum: number, e: any) => sum + Number(e.amount), 0) || 0;
-                chartData.push({ name: displayTime, total: hourSales - hourExpenses });
+                chartData.push({ name, total: hourSales });
             }
         }
     } else if (dateFormat === "day") {
-        for (let i = 0; i < dataPoints; i++) {
-            const d = new Date(startDate);
-            d.setDate(d.getDate() + i);
+        for (let i = dataPoints - 1; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
             const dateStr = d.toISOString().split("T")[0];
-            const displayDate = d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
 
             const daySales = bills?.filter((b: any) => b.created_at.startsWith(dateStr))
                 .reduce((sum: number, b: any) => sum + Number(b.total_amount), 0) || 0;
 
+            const name = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
             if (type === "sales") {
-                chartData.push({ name: displayDate, total: daySales });
+                chartData.push({ name, total: daySales });
             } else {
-                const dayExpenses = expenses?.filter((e: any) => e.date === dateStr)
+                const dayExpenses = expenses?.filter((e: any) => e.date.startsWith(dateStr))
                     .reduce((sum: number, e: any) => sum + Number(e.amount), 0) || 0;
-                chartData.push({ name: displayDate, total: daySales - dayExpenses });
+                chartData.push({ name, total: daySales - dayExpenses });
             }
         }
     } else if (dateFormat === "month") {
-        for (let i = 0; i < 12; i++) {
+        for (let i = 11; i >= 0; i--) {
             const d = new Date();
-            d.setMonth(d.getMonth() - (11 - i));
-            const monthStr = d.toISOString().slice(0, 7);
-            const displayDate = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+            d.setMonth(d.getMonth() - i);
+            const monthYearStr = d.toISOString().slice(0, 7);
 
-            const monthSales = bills?.filter((b: any) => b.created_at.startsWith(monthStr))
+            const monthSales = bills?.filter((b: any) => b.created_at.startsWith(monthYearStr))
                 .reduce((sum: number, b: any) => sum + Number(b.total_amount), 0) || 0;
 
+            const name = d.toLocaleDateString("en-US", { month: "short" });
+
             if (type === "sales") {
-                chartData.push({ name: displayDate, total: monthSales });
+                chartData.push({ name, total: monthSales });
             } else {
-                const monthExpenses = expenses?.filter((e: any) => e.date.startsWith(monthStr))
+                const monthExpenses = expenses?.filter((e: any) => e.date.startsWith(monthYearStr))
                     .reduce((sum: number, e: any) => sum + Number(e.amount), 0) || 0;
-                chartData.push({ name: displayDate, total: monthSales - monthExpenses });
+                chartData.push({ name, total: monthSales - monthExpenses });
             }
         }
     } else if (dateFormat === "year") {
         const years = range === "3y" ? 3 : 5;
-        for (let i = 0; i < years; i++) {
+        for (let i = years - 1; i >= 0; i--) {
             const d = new Date();
             d.setFullYear(d.getFullYear() - ((years - 1) - i));
             const yearStr = d.getFullYear().toString();
@@ -168,15 +181,51 @@ async function getChartData(supabase: any, range: string, type: "sales" | "profi
 export async function getDashboardStats(salesRange: string = "7d", profitRange: string = "7d") {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        return {
+            todaySales: 0,
+            pendingBills: 0,
+            lowStockItems: 0,
+            chartData: [],
+            profitChartData: [],
+            totalRevenue: 0,
+            totalOrders: 0,
+            todayProfit: 0,
+            activeNow: 1,
+        };
+    }
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    if (validStoreIds.length === 0) {
+        return {
+            todaySales: 0,
+            pendingBills: 0,
+            lowStockItems: 0,
+            chartData: [],
+            profitChartData: [],
+            totalRevenue: 0,
+            totalOrders: 0,
+            todayProfit: 0,
+            activeNow: 1,
+        };
+    }
+
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0];
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayISO = today.toISOString();
 
-    // 0. Global Stats (Total Revenue & Total Orders)
+    // 0. Store-Scoped Total Revenue & Total Orders
     const { data: allBills } = await supabase
         .from("bills")
         .select("total_amount")
+        .eq("store_id", targetStoreId)
         .neq("status", "cancelled");
 
     let totalRevenue = 0;
@@ -187,10 +236,11 @@ export async function getDashboardStats(salesRange: string = "7d", profitRange: 
         totalOrders = allBills.length;
     }
 
-    // 1. Today's Sales
+    // 1. Store-Scoped Today's Sales
     const { data: todayBills } = await supabase
         .from("bills")
         .select("total_amount")
+        .eq("store_id", targetStoreId)
         .neq("status", "cancelled")
         .gte("created_at", todayISO);
 
@@ -199,28 +249,29 @@ export async function getDashboardStats(salesRange: string = "7d", profitRange: 
         todaySales = todayBills.reduce((sum, bill) => sum + Number(bill.total_amount), 0);
     }
 
-    // 2. Pending & Low Stock
+    // 2. Store-Scoped Pending & Low Stock
     const { count: pendingBills } = await supabase
         .from("bills")
         .select("*", { count: "exact", head: true })
+        .eq("store_id", targetStoreId)
         .eq("status", "draft");
 
     const { count: lowStockItems } = await supabase
         .from("products")
         .select("*", { count: "exact", head: true })
+        .eq("store_id", targetStoreId)
         .lt("stock", 10);
 
-    // 4. Sales Chart Data
-    const chartData = await getChartData(supabase, salesRange, "sales");
-
-    // 5. Profit Chart Data
-    const profitChartData = await getChartData(supabase, profitRange, "profit");
+    // 4. Sales & Profit Chart Data
+    const chartData = await getChartData(supabase, salesRange, "sales", targetStoreId);
+    const profitChartData = await getChartData(supabase, profitRange, "profit", targetStoreId);
 
     // 6. Today's Profit
     const { data: todayExpenses } = await supabase
         .from("expenses")
         .select("amount")
-        .gte("date", todayISO);
+        .eq("store_id", targetStoreId)
+        .gte("date", todayISO.split("T")[0]);
 
     let todayExpensesTotal = 0;
     if (todayExpenses) {
@@ -237,23 +288,32 @@ export async function getDashboardStats(salesRange: string = "7d", profitRange: 
         totalRevenue,
         totalOrders,
         todayProfit,
-        activeNow: 1, // Hardcoded for now
+        activeNow: 1,
     };
 }
 
 export async function getInventorySummary() {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // Get products with low stock first, limit to top 20 for the chat context
+    if (!user) return [];
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0];
+
+    if (!targetStoreId) return [];
+
     const { data: products, error } = await supabase
         .from("products")
         .select("name, stock")
+        .eq("store_id", targetStoreId)
         .order("stock", { ascending: true })
         .limit(20);
 
     if (error) {
-        console.error("Error fetching inventory summary:", error);
         return [];
     }
 
@@ -263,8 +323,18 @@ export async function getInventorySummary() {
 export async function getRecentActivity() {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // Fetch latest from each table
+    if (!user) return [];
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0];
+
+    if (!targetStoreId) return [];
+
+    // Fetch latest strictly from active store
     const [
         { data: bills },
         { data: products },
@@ -274,60 +344,73 @@ export async function getRecentActivity() {
         supabase
             .from("bills")
             .select(`id, total_amount, created_at, customers(name)`)
+            .eq("store_id", targetStoreId)
             .neq("status", "cancelled")
             .order("created_at", { ascending: false })
             .limit(5),
         supabase
             .from("products")
             .select("id, name, stock, created_at")
+            .eq("store_id", targetStoreId)
             .order("created_at", { ascending: false })
             .limit(5),
         supabase
             .from("customers")
             .select("id, name, created_at")
+            .eq("store_id", targetStoreId)
             .order("created_at", { ascending: false })
             .limit(5),
         supabase
             .from("expenses")
-            .select("id, title, amount, created_at")
-            .order("created_at", { ascending: false })
+            .select("id, title, amount, date")
+            .eq("store_id", targetStoreId)
+            .order("date", { ascending: false })
             .limit(5)
     ]);
 
-    // Normalize data
-    const activities = [
-        ...(bills || []).map((b: any) => ({
+    const activities: any[] = [];
+
+    bills?.forEach((b: any) => {
+        activities.push({
+            id: `bill-${b.id}`,
             type: "bill",
-            id: b.id,
-            title: b.customers?.name || "Unknown Customer",
-            description: `Created a bill of ฿${Number(b.total_amount).toLocaleString()}`,
-            time: b.created_at
-        })),
-        ...(products || []).map((p: any) => ({
+            title: b.customers?.name || "Customer",
+            description: `Created a bill of $${b.total_amount}`,
+            timestamp: b.created_at,
+        });
+    });
+
+    products?.forEach((p: any) => {
+        activities.push({
+            id: `prod-${p.id}`,
             type: "product",
-            id: p.id,
             title: p.name,
             description: `New product added (Stock: ${p.stock})`,
-            time: p.created_at
-        })),
-        ...(customers || []).map((c: any) => ({
+            timestamp: p.created_at,
+        });
+    });
+
+    customers?.forEach((c: any) => {
+        activities.push({
+            id: `cust-${c.id}`,
             type: "customer",
-            id: c.id,
             title: c.name,
             description: "New customer registered",
-            time: c.created_at
-        })),
-        ...(expenses || []).map((e: any) => ({
-            type: "expense",
-            id: e.id,
-            title: e.title,
-            description: `Expense recorded: ฿${Number(e.amount).toLocaleString()}`,
-            time: e.created_at
-        }))
-    ];
+            timestamp: c.created_at,
+        });
+    });
 
-    // Sort by time desc and take top 10
-    return activities
-        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-        .slice(0, 10);
+    expenses?.forEach((e: any) => {
+        activities.push({
+            id: `exp-${e.id}`,
+            type: "expense",
+            title: e.title,
+            description: `Recorded expense of $${e.amount}`,
+            timestamp: e.date,
+        });
+    });
+
+    activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return activities.slice(0, 10);
 }

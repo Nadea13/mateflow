@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Customer } from "@/types";
+import { getStores } from "@/lib/actions/profile";
 
 export async function getCustomers(storeId?: string) {
     const cookieStore = await cookies();
@@ -12,22 +13,28 @@ export async function getCustomers(storeId?: string) {
 
     if (!user) return [];
 
-    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
 
-    let query = supabase.from("customers").select("*").order("created_at", { ascending: false });
+    if (validStoreIds.length === 0) return [];
 
-    if (targetStoreId) {
-        query = query.eq("store_id", targetStoreId);
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = storeId || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return [];
     }
+
+    let query = supabase
+        .from("customers")
+        .select("*")
+        .eq("store_id", targetStoreId)
+        .order("created_at", { ascending: false });
 
     let { data: customers, error } = await query;
 
     if (error || !customers) {
-        const fallback = await supabase
-            .from("customers")
-            .select("*")
-            .order("created_at", { ascending: false });
-        customers = fallback.data || [];
+        return [];
     }
 
     return customers;
@@ -42,66 +49,90 @@ export async function createCustomer(data: Partial<Customer>) {
         return { error: "Unauthorized" };
     }
 
-    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
-    if (!targetStoreId) {
-        const { data: defaultStore } = await supabase
-            .from("stores")
-            .select("id")
-            .eq("owner_id", user.id)
-            .order("created_at", { ascending: true })
-            .maybeSingle();
-        if (defaultStore) targetStoreId = defaultStore.id;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return { error: "Store not found or access denied" };
     }
 
-    const payload: any = {
-        ...data,
-        store_id: targetStoreId || user.id,
-        updated_at: new Date().toISOString(),
-    };
-
-    let { error } = await supabase.from("customers").insert(payload);
-
-    if (error && (error.code === "PGRST204" || error.message?.includes("store_id"))) {
-        delete payload.store_id;
-        payload.user_id = user.id;
-        const fallbackRes = await supabase.from("customers").insert(payload);
-        error = fallbackRes.error;
-    }
+    const { data: customer, error } = await supabase
+        .from("customers")
+        .insert({
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            address: data.address,
+            tax_id: data.tax_id,
+            store_id: targetStoreId,
+        })
+        .select()
+        .single();
 
     if (error) {
         console.error("Error creating customer:", error);
         return { error: "Failed to create customer" };
     }
 
-    revalidatePath("/dashboard/catalog", "page"); 
-    revalidatePath("/dashboard/customers", "page");
-    return { success: true };
+    revalidatePath("/dashboard/customers");
+    revalidatePath("/dashboard/bills");
+    return { success: true, customer };
 }
 
 export async function updateCustomer(id: string, data: Partial<Customer>) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
 
-    const { error } = await supabase
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { data: existing } = await supabase.from("customers").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
+
+    const { data: customer, error } = await supabase
         .from("customers")
         .update({
-            ...data,
-            updated_at: new Date().toISOString(),
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            address: data.address,
+            tax_id: data.tax_id,
         })
-        .eq("id", id);
+        .eq("id", id)
+        .select()
+        .single();
 
     if (error) {
         console.error("Error updating customer:", error);
         return { error: "Failed to update customer" };
     }
 
-    revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/customers", "page");
-    return { success: true };
+    revalidatePath("/dashboard/customers");
+    return { success: true, customer };
 }
 
 export async function deleteCustomer(id: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { data: existing } = await supabase.from("customers").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
 
     const { error } = await supabase
         .from("customers")
@@ -113,6 +144,6 @@ export async function deleteCustomer(id: string) {
         return { error: "Failed to delete customer" };
     }
 
-    revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/customers", "page");
+    revalidatePath("/dashboard/customers");
     return { success: true };
 }

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Location, InventoryLevel } from "@/types";
+import { getStores } from "@/lib/actions/profile";
 
 export async function getLocations(storeId?: string) {
     const cookieStore = await cookies();
@@ -12,37 +13,19 @@ export async function getLocations(storeId?: string) {
 
     if (!user) return [];
 
-    // 1. Determine target active store
-    let targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
 
-    if (!targetStoreId) {
-        // Check owned store
-        const { data: defaultStore } = await supabase
-            .from("stores")
-            .select("id")
-            .eq("owner_id", user.id)
-            .order("created_at", { ascending: true })
-            .maybeSingle();
+    if (validStoreIds.length === 0) return [];
 
-        if (defaultStore) {
-            targetStoreId = defaultStore.id;
-        } else {
-            // Check member store (employee)
-            const { data: memberStore } = await supabase
-                .from("store_team_members")
-                .select("store_id")
-                .eq("user_id", user.id)
-                .order("created_at", { ascending: true })
-                .maybeSingle();
-            if (memberStore) {
-                targetStoreId = memberStore.store_id;
-            }
-        }
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = storeId || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return [];
     }
 
-    if (!targetStoreId) return [];
-
-    // 2. Fetch branches belonging to this active store
+    // Fetch branches belonging strictly to this active store
     const { data: branchs, error } = await supabase
         .from("branchs")
         .select("*")
@@ -50,7 +33,6 @@ export async function getLocations(storeId?: string) {
         .order("created_at", { ascending: true });
 
     if (error || !branchs) {
-        console.error("Error fetching branches for store:", error);
         return [];
     }
 
@@ -70,19 +52,14 @@ export async function createLocation(data: Partial<Location>) {
         return { error: "Unauthorized" };
     }
 
-    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
-    if (!targetStoreId) {
-        const { data: defaultStore } = await supabase
-            .from("stores")
-            .select("id")
-            .eq("owner_id", user.id)
-            .order("created_at", { ascending: true })
-            .maybeSingle();
-        if (defaultStore) targetStoreId = defaultStore.id;
-    }
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
 
-    if (!targetStoreId) {
-        return { error: "Store not found" };
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return { error: "Store not found or access denied" };
     }
 
     const { data: location, error } = await supabase
@@ -112,6 +89,17 @@ export async function createLocation(data: Partial<Location>) {
 export async function updateLocation(id: string, data: Partial<Location>) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { data: existing } = await supabase.from("branchs").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
 
     const { error } = await supabase
         .from("branchs")
@@ -138,6 +126,17 @@ export async function updateLocation(id: string, data: Partial<Location>) {
 export async function deleteLocation(id: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { data: existing } = await supabase.from("branchs").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
 
     const { error } = await supabase
         .from("branchs")
@@ -162,16 +161,22 @@ export async function getInventoryLevels(storeId?: string) {
 
     if (!user) return [];
 
-    let targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    if (validStoreIds.length === 0) return [];
+
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = storeId || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return [];
+    }
 
     let query = supabase.from("inventory_levels").select(`
         *,
         branch:branchs ( name, code )
-    `);
-
-    if (targetStoreId) {
-        query = query.eq("store_id", targetStoreId);
-    }
+    `).eq("store_id", targetStoreId);
 
     const { data, error } = await query;
 
@@ -190,6 +195,17 @@ export async function getInventoryLevels(storeId?: string) {
 export async function updateStockLevel(productId: string, locationId: string, quantity: number, variantId?: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const activeStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = activeStoreId && validStoreIds.includes(activeStoreId) ? activeStoreId : validStoreIds[0];
+
+    if (!targetStoreId) return { error: "Store not found" };
 
     let query = supabase
         .from("inventory_levels")
@@ -216,11 +232,10 @@ export async function updateStockLevel(productId: string, locationId: string, qu
 
         if (error) return { error: "Failed to update stock level" };
     } else {
-        const activeStoreId = cookieStore.get("active_store_id")?.value;
         const { error } = await supabase
             .from("inventory_levels")
             .insert({
-                store_id: activeStoreId,
+                store_id: targetStoreId,
                 product_id: productId,
                 location_id: locationId,
                 variant_id: variantId || null,

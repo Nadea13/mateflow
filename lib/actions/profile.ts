@@ -21,79 +21,46 @@ export async function getUserProfile() {
         .eq("id", user.id)
         .maybeSingle();
 
-    // 2. Read active store ID from cookie if set
+    // 2. Fetch all valid stores this user has legitimate access to (owned or member)
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
     const activeStoreIdCookie = cookieStore.get("active_store_id")?.value;
+    let activeStore: any = null;
 
-    let storeQuery = supabase.from("stores").select("*");
-    if (activeStoreIdCookie) {
-        storeQuery = storeQuery.eq("id", activeStoreIdCookie);
+    if (activeStoreIdCookie && validStoreIds.includes(activeStoreIdCookie)) {
+        activeStore = validStores.find(s => s.id === activeStoreIdCookie);
     } else {
-        storeQuery = storeQuery.eq("owner_id", user.id).order("created_at", { ascending: true });
+        // Default to the first store the user owns or belongs to
+        activeStore = validStores[0] || null;
     }
 
-    let { data: store } = await storeQuery.maybeSingle();
-
-    // 3. Check if user is an owner or employee in store_team_members
-    let userRole = "owner";
-
-    if (store) {
-        if (store.owner_id !== user.id) {
-            // User is employee in this store
-            const { data: member } = await supabase
-                .from("store_team_members")
-                .select("role")
-                .eq("store_id", store.id)
-                .eq("user_id", user.id)
-                .maybeSingle();
-
-            if (member) {
-                userRole = member.role || "sales";
-            }
-        }
-    } else {
-        // Fallback check if user is invited employee to any store
-        const { data: membership } = await supabase
-            .from("store_team_members")
-            .select("role, store_id")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: true })
-            .maybeSingle();
-
-        if (membership) {
-            const { data: s } = await supabase
-                .from("stores")
-                .select("*")
-                .eq("id", membership.store_id)
-                .maybeSingle();
-
-            if (s) {
-                store = s;
-                userRole = membership.role || "sales";
-            }
-        }
-    }
-
-    if (!store) {
-        // Fallback query by id
-        const storeFallback = await supabase
-            .from("stores")
-            .select("*")
-            .eq("id", user.id)
-            .maybeSingle();
-        store = storeFallback.data;
+    if (!activeStore) {
+        return {
+            id: user.id,
+            email: user.email || dbUser?.email || "",
+            store_name: "ร้านค้าของคุณ",
+            avatar_url: dbUser?.avatar_url || "",
+            owner_id: user.id,
+            role: "owner",
+            default_currency: "THB",
+            country: "TH",
+            tax_rate: 7,
+            updated_at: new Date().toISOString(),
+        } as Profile;
     }
 
     return {
         id: user.id,
         email: user.email || dbUser?.email || "",
-        store_name: store?.store_name || "",
-        avatar_url: store?.avatar_url || dbUser?.avatar_url || "",
-        owner_id: store?.owner_id || user.id,
-        role: userRole as any,
-        default_currency: store?.default_currency || "THB",
-        country: store?.country || "TH",
-        tax_rate: store?.tax_rate || 7,
-        updated_at: store?.updated_at || new Date().toISOString(),
+        store_name: activeStore.store_name || "",
+        avatar_url: activeStore.avatar_url || dbUser?.avatar_url || "",
+        owner_id: activeStore.owner_id || user.id,
+        role: activeStore.user_role || (activeStore.owner_id === user.id ? "owner" : "sales"),
+        default_currency: activeStore.default_currency || "THB",
+        country: activeStore.country || "TH",
+        tax_rate: activeStore.tax_rate || 7,
+        updated_at: activeStore.updated_at || new Date().toISOString(),
     } as Profile;
 }
 
@@ -127,47 +94,33 @@ export async function getStoreProfile(storeId?: string) {
 
     if (!user) return null;
 
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
     const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+    let store: any = null;
 
-    let query = supabase.from("stores").select("*");
-    if (targetStoreId) {
-        query = query.eq("id", targetStoreId);
+    if (targetStoreId && validStoreIds.includes(targetStoreId)) {
+        store = validStores.find(s => s.id === targetStoreId);
     } else {
-        query = query.eq("owner_id", user.id).order("created_at", { ascending: true });
+        store = validStores[0] || null;
     }
 
-    let { data: store } = await query.maybeSingle();
-
-    if (!store) {
-        // Fallback by member membership
-        const { data: membership } = await supabase
-            .from("store_team_members")
-            .select("store_id")
-            .eq("user_id", user.id)
-            .maybeSingle();
-        if (membership) {
-            const { data: s } = await supabase
-                .from("stores")
-                .select("*")
-                .eq("id", membership.store_id)
-                .maybeSingle();
-            store = s;
-        }
-    }
+    if (!store) return null;
 
     return {
-        id: store?.id || user.id,
-        owner_id: store?.owner_id || user.id,
-        store_name: store?.store_name || "",
-        avatar_url: store?.avatar_url || "",
-        store_address: store?.store_address || "",
-        tax_id: store?.tax_id || "",
-        signature_url: store?.signature_url || "",
-        store_phone: store?.store_phone || "",
-        role: store?.owner_id === user.id ? "owner" : "sales",
-        etax_enabled: store?.etax_enabled || false,
-        etax_api_key: store?.etax_api_key || "",
-        etax_company_id: store?.etax_company_id || "",
+        id: store.id,
+        owner_id: store.owner_id || user.id,
+        store_name: store.store_name || "",
+        avatar_url: store.avatar_url || "",
+        store_address: store.store_address || "",
+        tax_id: store.tax_id || "",
+        signature_url: store.signature_url || "",
+        store_phone: store.store_phone || "",
+        role: store.user_role || (store.owner_id === user.id ? "owner" : "sales"),
+        etax_enabled: store.etax_enabled || false,
+        etax_api_key: store.etax_api_key || "",
+        etax_company_id: store.etax_company_id || "",
     };
 }
 
@@ -177,6 +130,17 @@ export async function getProfile(storeId?: string) {
 
 export async function switchActiveStore(storeId: string) {
     const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    // Verify user owns or is member of this store
+    const validStores = await getStores();
+    if (!validStores.some(s => s.id === storeId)) {
+        return { error: "Access denied to target store" };
+    }
+
     cookieStore.set("active_store_id", storeId, {
         path: "/",
         maxAge: 60 * 60 * 24 * 365, // 1 year
@@ -242,24 +206,6 @@ export async function getStores() {
                     });
                 }
             }
-        }
-    }
-
-    // Fallback: If list is completely empty, try fetching all stores user has ID on
-    if (allStores.length === 0) {
-        const { data: fallbackStores } = await supabase
-            .from("stores")
-            .select(`
-                *,
-                branchs:branchs ( id, name, code, type, address )
-            `);
-
-        if (fallbackStores && fallbackStores.length > 0) {
-            return fallbackStores.map(s => ({
-                ...s,
-                user_role: s.owner_id === user.id ? "owner" : "sales",
-                branches: s.branchs || [],
-            }));
         }
     }
 
@@ -406,7 +352,8 @@ export async function updateProfile(data: {
     const { error } = await supabase
         .from("stores")
         .update(updatePayload)
-        .eq("id", targetStoreId);
+        .eq("id", targetStoreId)
+        .eq("owner_id", user.id);
 
     if (error) {
         console.error("Supabase updateStore error:", error);
@@ -463,6 +410,8 @@ export async function getTeamMembers(storeId?: string) {
 export async function signOutUser() {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    // Clear active store cookie on logout
+    cookieStore.delete("active_store_id");
     await supabase.auth.signOut();
     redirect("/login");
 }
