@@ -101,7 +101,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
             }) as any;
 
             if (res?.success) {
-                toast.success("สร้างร้านค้าและสาขาเริ่มต้นเรียบร้อยแล้ว!");
+                toast.success("สร้างร้านค้าและสาขาลงตาราง branchs เรียบร้อยแล้ว!");
                 setOpen(false);
                 // Reset form fields
                 setStoreName("");
@@ -112,6 +112,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                 setSignatureUrl("");
                 setBranchName("");
                 setBranchCode("HQ-01");
+                setBranchType("warehouse");
                 setBranchAddress("");
                 window.location.reload();
             } else {
@@ -215,12 +216,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                 <Input
                                     id="store-name"
                                     value={storeName}
-                                    onChange={(e) => {
-                                        setStoreName(e.target.value);
-                                        if (!branchName) {
-                                            // auto suggest branch name if empty
-                                        }
-                                    }}
+                                    onChange={(e) => setStoreName(e.target.value)}
                                     placeholder="เช่น Mateflow Flagship Store"
                                     required
                                     className="h-9 text-xs"
@@ -270,7 +266,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             </div>
                         </div>
 
-                        {/* Section 2: Initial Branch (สาขาเริ่มต้น) */}
+                        {/* Section 2: Initial Branch (สาขาเริ่มต้น) - Clean Compact View with Type Selector */}
                         <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
@@ -279,7 +275,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                     </div>
                                     <div>
                                         <h4 className="text-xs font-bold text-foreground">สาขาเริ่มต้นของร้านนี้</h4>
-                                        <p className="text-[10px] text-muted-foreground">สำหรับใช้เป็นคลังสต็อกและหน้าร้านแรก</p>
+                                        <p className="text-[10px] text-muted-foreground">บันทึกลงตาราง branchs เป็นคลังสต็อกและหน้าร้านแรก</p>
                                     </div>
                                 </div>
                                 <button
@@ -287,12 +283,13 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                     onClick={() => setShowBranchDetails(!showBranchDetails)}
                                     className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
                                 >
-                                    {showBranchDetails ? "ย่อลง" : "กำหนดเอง"}
+                                    {showBranchDetails ? "ย่อลง" : "กำหนดเพิ่มเติม"}
                                     {showBranchDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                                 </button>
                             </div>
 
-                            <div className="space-y-2.5">
+                            {/* Main Compact Line: Branch Name + Branch Type */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                 <div className="space-y-1">
                                     <Label htmlFor="branch-name" className="text-[11px] font-semibold text-foreground">
                                         ชื่อสาขาแรก
@@ -306,42 +303,43 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                     />
                                 </div>
 
-                                {showBranchDetails && (
-                                    <div className="space-y-2.5 pt-1 border-t border-primary/10">
-                                        <div className="grid grid-cols-2 gap-2.5">
-                                            <div className="space-y-1">
-                                                <Label htmlFor="branch-code" className="text-[11px] font-semibold">
-                                                    รหัสสาขา (Code)
-                                                </Label>
-                                                <Input
-                                                    id="branch-code"
-                                                    value={branchCode}
-                                                    onChange={(e) => setBranchCode(e.target.value)}
-                                                    placeholder="HQ-01"
-                                                    className="h-8 text-xs bg-background"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-[11px] font-semibold">
-                                                    ประเภท
-                                                </Label>
-                                                <Select value={branchType} onValueChange={(val: any) => setBranchType(val)}>
-                                                    <SelectTrigger className="h-8 text-xs bg-background">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="warehouse">คลังสินค้าหลัก (Warehouse)</SelectItem>
-                                                        <SelectItem value="storefront">หน้าร้าน (Storefront)</SelectItem>
-                                                        <SelectItem value="3pl">3PL / FBA</SelectItem>
-                                                        <SelectItem value="other">อื่นๆ (Other)</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </div>
+                                <div className="space-y-1">
+                                    <Label className="text-[11px] font-semibold text-foreground">
+                                        ประเภทสาขา
+                                    </Label>
+                                    <Select value={branchType} onValueChange={(val: any) => setBranchType(val)}>
+                                        <SelectTrigger className="h-8 text-xs bg-background">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="warehouse">คลังสินค้าหลัก (Warehouse)</SelectItem>
+                                            <SelectItem value="storefront">หน้าร้าน (Storefront)</SelectItem>
+                                            <SelectItem value="3pl">3PL / FBA (ศูนย์กระจายสินค้า)</SelectItem>
+                                            <SelectItem value="other">อื่นๆ (Other)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
 
+                            {/* Additional Expanded Details: Code + Address */}
+                            {showBranchDetails && (
+                                <div className="space-y-2.5 pt-2 border-t border-primary/10">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                        <div className="space-y-1">
+                                            <Label htmlFor="branch-code" className="text-[11px] font-semibold">
+                                                รหัสสาขา (Code)
+                                            </Label>
+                                            <Input
+                                                id="branch-code"
+                                                value={branchCode}
+                                                onChange={(e) => setBranchCode(e.target.value)}
+                                                placeholder="HQ-01"
+                                                className="h-8 text-xs bg-background font-mono"
+                                            />
+                                        </div>
                                         <div className="space-y-1">
                                             <Label htmlFor="branch-address" className="text-[11px] font-semibold">
-                                                ที่อยู่สาขา (เว้นว่างเพื่อใช้ที่อยู่เดียวกับร้าน)
+                                                ที่อยู่สาขา (เว้นว่างเพื่อใช้ที่อยู่ร้าน)
                                             </Label>
                                             <Input
                                                 id="branch-address"
@@ -352,8 +350,8 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                             />
                                         </div>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Section 3: Authorized Signature Upload Dropzone */}
