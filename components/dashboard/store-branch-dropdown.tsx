@@ -170,7 +170,7 @@ export function StoreBranchDropdown({
                             className="w-full h-8 text-xs font-semibold justify-center gap-1.5 text-primary hover:bg-primary/10 hover:text-primary rounded-lg cursor-pointer"
                         >
                             <Plus className="h-3.5 w-3.5" />
-                            <span>+ เพิ่มสาขา / คลังสินค้าใหม่</span>
+                            <span>+ เพิ่มสาขาใหม่</span>
                         </Button>
 
                         <Button
@@ -183,7 +183,7 @@ export function StoreBranchDropdown({
                             className="w-full h-8 text-xs font-semibold justify-center gap-1.5 border-border hover:bg-muted/60 text-muted-foreground hover:text-foreground rounded-lg cursor-pointer"
                         >
                             <StoreIcon className="h-3.5 w-3.5" />
-                            <span>+ สร้าง / แก้ไขร้านค้าใหม่</span>
+                            <span>+ เพิ่มร้านใหม่</span>
                         </Button>
                     </div>
                 </PopoverContent>
@@ -195,7 +195,7 @@ export function StoreBranchDropdown({
                 setOpen={setAddBranchOpen}
             />
 
-            {/* Modal for adding / editing store */}
+            {/* Modal for adding a new store */}
             <CreateStoreDialog
                 open={createStoreOpen}
                 setOpen={setCreateStoreOpen}
