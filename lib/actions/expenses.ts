@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Expense } from "@/types";
+import { getStores } from "@/lib/actions/profile";
 
 export async function getExpenses(storeId?: string) {
     const cookieStore = await cookies();
@@ -12,25 +13,53 @@ export async function getExpenses(storeId?: string) {
 
     if (!user) return [];
 
-    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
 
-    let query = supabase.from("expenses").select("*").order("date", { ascending: false });
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = storeId || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
 
+    let rawExpenses: any[] = [];
+
+    // 1. Try active store
     if (targetStoreId) {
-        query = query.eq("store_id", targetStoreId);
+        const { data, error } = await supabase
+            .from("expenses")
+            .select("*")
+            .eq("store_id", targetStoreId)
+            .order("date", { ascending: false });
+
+        if (!error && data && data.length > 0) {
+            rawExpenses = data;
+        }
     }
 
-    let { data: expenses, error } = await query;
+    // 2. Try all user's stores
+    if (rawExpenses.length === 0 && validStoreIds.length > 0) {
+        const { data, error } = await supabase
+            .from("expenses")
+            .select("*")
+            .in("store_id", validStoreIds)
+            .order("date", { ascending: false });
 
-    if (error || !expenses) {
-        const fallback = await supabase
+        if (!error && data && data.length > 0) {
+            rawExpenses = data;
+        }
+    }
+
+    // 3. Fallback: all expenses in table
+    if (rawExpenses.length === 0) {
+        const { data, error } = await supabase
             .from("expenses")
             .select("*")
             .order("date", { ascending: false });
-        expenses = fallback.data || [];
+
+        if (!error && data) {
+            rawExpenses = data;
+        }
     }
 
-    return expenses;
+    return rawExpenses as Expense[];
 }
 
 export async function createExpense(data: {
@@ -38,10 +67,13 @@ export async function createExpense(data: {
     amount: number;
     category: string;
     description?: string;
+    notes?: string;
     date: string;
     receipt_url?: string;
     vendor_name?: string;
     vendor_tax_id?: string;
+    supplier_id?: string;
+    supplier_name?: string;
     wht_rate?: number;
     wht_amount?: number;
     input_vat?: number;
@@ -55,36 +87,48 @@ export async function createExpense(data: {
         return { error: "Unauthorized" };
     }
 
-    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
     if (!targetStoreId) {
         const { data: defaultStore } = await supabase
             .from("stores")
             .select("id")
             .eq("owner_id", user.id)
-            .order("created_at", { ascending: true })
             .maybeSingle();
         if (defaultStore) targetStoreId = defaultStore.id;
     }
 
     const payload: any = {
-        store_id: targetStoreId || user.id,
-        ...data,
+        title: data.title,
+        amount: Number(data.amount) || 0,
+        category: data.category || "other",
+        date: data.date || new Date().toISOString().split("T")[0],
+        receipt_url: data.receipt_url || null,
+        vendor_name: data.vendor_name || data.supplier_name || null,
+        supplier_id: data.supplier_id || null,
+        supplier_name: data.supplier_name || null,
+        description: data.description || data.notes || null,
+        notes: data.notes || data.description || null,
+        wht_rate: data.wht_rate || null,
+        wht_amount: data.wht_amount || null,
+        input_vat: data.input_vat || null,
     };
+
+    if (targetStoreId) {
+        payload.store_id = targetStoreId;
+    }
 
     let { error } = await supabase
         .from("expenses")
         .insert(payload);
 
-    if (error && (error.code === "PGRST204" || error.message?.includes("store_id"))) {
-        delete payload.store_id;
-        payload.user_id = user.id;
-        const fallbackRes = await supabase.from("expenses").insert(payload);
-        error = fallbackRes.error;
-    }
-
     if (error) {
         console.error("Error creating expense:", error);
-        return { error: "Failed to create expense" };
+        return { error: error.message || "Failed to create expense" };
     }
 
     revalidatePath("/dashboard/expenses", "page");
@@ -100,24 +144,25 @@ export async function uploadReceipt(formData: FormData) {
         uploadFormData.append("file", file);
         uploadFormData.append("folder", "receipts");
 
-        const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/upload`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ""}/api/upload`, {
             method: "POST",
             body: uploadFormData,
         });
 
-        const data = await res.json();
-        if (data.success) {
-            return { success: true, receipt_url: data.url };
-        }
-        return { error: data.error || "Upload failed" };
-    } catch (err: any) {
-        return { error: err.message || "Failed to upload receipt" };
+        if (!res.ok) throw new Error("Upload failed");
+        const json = await res.json();
+        return { url: json.url };
+    } catch (e: any) {
+        return { error: e.message || "Failed to upload receipt" };
     }
 }
 
 export async function deleteExpense(id: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
 
     const { error } = await supabase
         .from("expenses")

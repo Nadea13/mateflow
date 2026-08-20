@@ -1,4 +1,4 @@
-﻿import type { TranslationKeys } from "../types";
+import type { TranslationKeys } from "../types";
 
 const th: TranslationKeys = {
     // Navigation
@@ -115,20 +115,29 @@ const th: TranslationKeys = {
         title: "การเงินและค่าใช้จ่าย",
         subtitle: "บันทึกรายจ่ายธุรกิจ ใบสั่งซื้อ PO และคำนวณภาษีหัก ณ ที่จ่าย",
         addExpense: "บันทึกรายจ่าย",
+        createPO: "สร้างใบสั่งซื้อ PO",
         addPO: "สร้างใบสั่งซื้อ PO",
         tabOverview: "ภาพรวมการเงิน",
         tabExpenses: "รายการค่าใช้จ่าย",
+        tabPurchaseOrders: "ใบสั่งซื้อ PO",
         tabPOs: "ใบสั่งซื้อ PO",
+        taxReport: "ภาษีหัก ณ ที่จ่าย",
+        totalExpenses: "ค่าใช้จ่ายรวม",
         totalExpense: "ค่าใช้จ่ายรวม",
         totalExpenseDesc: "ค่าใช้จ่ายทั้งหมดในระบบ",
+        totalPOs: "ยอดรวมใบสั่งซื้อ PO",
         monthlyExpense: "ค่าใช้จ่ายเดือนนี้",
         monthlyExpenseDesc: "รวมทุกหมวดหมู่ของเดือนปัจจุบัน",
         pendingPOs: "PO รอรับของ",
         pendingPOsDesc: "ใบสั่งซื้อที่ยังไม่ได้ส่งมอบ",
         recentExpenses: "รายการใช้จ่ายล่าสุด",
+        expenseTitle: "รายการ / รายละเอียด",
         category: "หมวดหมู่",
         amount: "จำนวนเงิน",
         date: "วันที่",
+        from: "จาก",
+        items: "รายการ",
+        orders: "ออร์เดอร์",
         noExpenses: "ยังไม่มีรายการค่าใช้จ่าย",
         noExpensesDesc: "เริ่มบันทึกค่าใช้จ่ายเพื่อดูต้นทุนและผลกำไรที่แท้จริงของร้าน",
     },
