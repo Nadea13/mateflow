@@ -147,7 +147,7 @@ export async function createBill(data: {
     }
     total_amount = Math.max(0, Math.round(total_amount * 100) / 100);
 
-    // 1. Create bill strictly for targetStoreId
+    // 1. Create bill strictly with verified columns
     const billPayload: any = {
         store_id: targetStoreId,
         customer_id: data.customer_id,
@@ -157,8 +157,6 @@ export async function createBill(data: {
         adjustments: data.adjustments || [],
         payment_terms: data.payment_terms || 0,
         validity_days: data.validity_days || 7,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
     };
 
     let { data: bill, error: billError } = await supabase
@@ -191,7 +189,7 @@ export async function createBill(data: {
         return { error: "Failed to create bill items" };
     }
 
-    // 3. Deduct stock only if not purely quotation or when created directly as paid/draft
+    // 3. Deduct stock for each product belonging to this store
     for (const item of data.items) {
         const { data: product } = await supabase
             .from("products")
@@ -204,7 +202,7 @@ export async function createBill(data: {
             const newStock = Math.max(0, (product.stock || 0) - item.quantity);
             await supabase
                 .from("products")
-                .update({ stock: newStock, updated_at: new Date().toISOString() })
+                .update({ stock: newStock })
                 .eq("id", item.product_id)
                 .eq("store_id", targetStoreId);
         }
@@ -233,10 +231,9 @@ export async function updateBillStatus(id: string, status: "quotation" | "draft"
 
     const updatePayload: any = {
         status,
-        updated_at: new Date().toISOString(),
     };
 
-    // When transitioning to draft (ใบแจ้งหนี้), update created_at to the moment invoice was officially issued
+    // When transitioning to draft (ใบแจ้งหนี้), update created_at to current timestamp
     if (status === "draft") {
         updatePayload.created_at = new Date().toISOString();
     }
@@ -248,7 +245,7 @@ export async function updateBillStatus(id: string, status: "quotation" | "draft"
 
     if (error) {
         console.error("Error updating bill status:", error);
-        return { error: "Failed to update status" };
+        return { error: error.message || "Failed to update status" };
     }
 
     revalidatePath("/dashboard/bills");
