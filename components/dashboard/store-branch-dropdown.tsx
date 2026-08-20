@@ -40,6 +40,8 @@ export function StoreBranchDropdown({
     const [joining, setJoining] = useState(false);
     const [switchingStoreId, setSwitchingStoreId] = useState<string | null>(null);
 
+    const hasStore = stores.length > 0;
+
     // Find current active store object
     const currentStoreObj = stores.find(s => s.id === activeStoreId) || stores[0];
     const displayStoreName = initialStoreName?.trim() || currentStoreObj?.store_name || "MateFlow Store";
@@ -116,6 +118,27 @@ export function StoreBranchDropdown({
         }
     };
 
+    // If user has no store yet, render direct prominent "สร้างร้านค้า" Button
+    if (!hasStore) {
+        return (
+            <>
+                <button
+                    type="button"
+                    onClick={() => setCreateStoreOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-primary/60 bg-primary/10 hover:bg-primary/20 hover:border-primary text-primary transition-all duration-150 shadow-2xs group cursor-pointer"
+                >
+                    <Plus className="h-4 w-4" />
+                    <span className="text-xs font-bold">+ สร้างร้านค้าของคุณ</span>
+                </button>
+
+                <CreateStoreDialog
+                    open={createStoreOpen}
+                    setOpen={setCreateStoreOpen}
+                />
+            </>
+        );
+    }
+
     return (
         <>
             <Popover open={open} onOpenChange={setOpen}>
@@ -158,309 +181,268 @@ export function StoreBranchDropdown({
                                     )}
                                 </div>
                                 <div className="flex flex-col min-w-0">
-                                    <span className="text-xs font-bold text-foreground truncate max-w-[110px]" title={displayStoreName}>
+                                    <span className="text-xs font-bold text-foreground truncate max-w-[140px]">
                                         {displayStoreName}
                                     </span>
-                                    <span className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1 mt-0.5">
-                                        <User className="h-2.5 w-2.5 text-primary" /> ตำแหน่ง: <span className="text-primary font-bold">{currentRoleBadge.label}</span>
-                                    </span>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                        <span className={`text-[8px] font-bold px-1 rounded border ${currentRoleBadge.color}`}>
+                                            {currentRoleBadge.label}
+                                        </span>
+                                        {currentStoreObj?.tax_id && (
+                                            <span className="text-[9px] text-muted-foreground font-mono truncate max-w-[90px]">
+                                                {currentStoreObj.tax_id}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                            
-                            {/* Action Buttons: 1. ตั้งค่า, 2. สลับร้าน */}
-                            <div className="flex items-center gap-1.5 shrink-0">
-                                {effectiveRole === "owner" && (
-                                    <Link href="/dashboard/store" onClick={() => setOpen(false)}>
-                                        <span className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer flex items-center gap-0.5 transition-colors px-1.5 py-1 rounded hover:bg-muted">
-                                            <Settings className="h-3 w-3" />
-                                            ตั้งค่า
-                                        </span>
-                                    </Link>
-                                )}
-
-                                <button
-                                    type="button"
+                            <div className="flex items-center gap-1 shrink-0">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
                                     onClick={() => {
                                         setOpen(false);
                                         setSwitchStoreOpen(true);
                                     }}
-                                    className="text-[10px] bg-primary/10 hover:bg-primary/20 text-primary font-semibold px-2 py-1 rounded-md flex items-center gap-1 transition-colors cursor-pointer"
-                                    title="สลับไปร้านอื่น"
+                                    className="h-7 px-2 text-[10px] font-semibold gap-1 text-primary border-primary/30 hover:bg-primary/10 cursor-pointer"
+                                    title="เปลี่ยนร้านค้า"
                                 >
-                                    <ArrowLeftRight className="h-2.5 w-2.5" />
+                                    <ArrowLeftRight className="h-3 w-3" />
                                     เปลี่ยนร้าน
-                                </button>
+                                </Button>
+                                {effectiveRole === "owner" && (
+                                    <Link
+                                        href="/dashboard/store"
+                                        onClick={() => setOpen(false)}
+                                        className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                        title="ตั้งค่าข้อมูลร้านค้า"
+                                    >
+                                        <Settings className="h-3.5 w-3.5" />
+                                    </Link>
+                                )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Branches List Header */}
-                    <div className="px-1 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            สาขาที่คุณเข้าทำงาน ({accessibleLocations.length > 0 ? accessibleLocations.length : 1})
-                        </span>
-                    </div>
-
-                    {/* Branches Selection List */}
-                    <div className="space-y-1 max-h-44 overflow-y-auto pr-0.5">
-                        {accessibleLocations.length === 0 ? (
-                            <button
-                                onClick={() => {
-                                    setSelectedBranchId("main");
-                                    setOpen(false);
-                                }}
-                                className={`w-full flex items-center justify-between p-2 rounded-lg text-xs transition-colors cursor-pointer ${
-                                    selectedBranchId === "main"
-                                        ? "bg-primary/10 text-primary font-semibold border border-primary/20"
-                                        : "hover:bg-muted/60 text-foreground"
-                                }`}
-                            >
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                                    <div className="flex flex-col text-left min-w-0">
-                                        <span className="truncate font-semibold">สาขาหลัก (Headquarters)</span>
-                                        <span className="text-[10px] text-muted-foreground font-normal">คลังสินค้าเริ่มต้น</span>
-                                    </div>
-                                </div>
-                                {selectedBranchId === "main" && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
-                            </button>
-                        ) : (
-                            accessibleLocations.map((loc) => {
-                                const isSelected = selectedBranchId === loc.id;
-                                return (
-                                    <button
-                                        key={loc.id}
-                                        onClick={() => {
-                                            setSelectedBranchId(loc.id);
-                                            setOpen(false);
-                                        }}
-                                        className={`w-full flex items-center justify-between p-2 rounded-lg text-xs transition-colors cursor-pointer ${
-                                            isSelected
-                                                ? "bg-primary/10 text-primary font-semibold border border-primary/20"
-                                                : "hover:bg-muted/60 text-foreground"
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                                            <div className="flex flex-col text-left min-w-0">
-                                                <span className="truncate max-w-[170px] font-semibold">{loc.name}</span>
-                                                <span className="text-[10px] text-muted-foreground font-normal truncate max-w-[170px]">
-                                                    {loc.code ? `รหัส: ${loc.code}` : loc.address || "สาขา / คลัง"}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        {isSelected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
-                                    </button>
-                                );
-                            })
-                        )}
-                    </div>
-
-                    {/* Bottom Action Buttons */}
-                    <div className="pt-2 border-t border-border space-y-1">
-                        {effectiveRole === "owner" && (
-                            <>
+                    {/* Branch Selection Section */}
+                    <div className="space-y-1">
+                        <div className="flex items-center justify-between px-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                                สาขา ({accessibleLocations.length})
+                            </span>
+                            {effectiveRole === "owner" && (
                                 <button
-                                    type="button"
                                     onClick={() => {
                                         setOpen(false);
                                         setCreateLocationOpen(true);
                                     }}
-                                    className="w-full flex items-center gap-2 p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors font-medium cursor-pointer"
+                                    className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
                                 >
-                                    <Plus className="h-3.5 w-3.5 text-primary" />
-                                    + เพิ่มสาขาใหม่
+                                    <Plus className="h-2.5 w-2.5" />
+                                    เพิ่มสาขา
                                 </button>
+                            )}
+                        </div>
 
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setOpen(false);
-                                        setCreateStoreOpen(true);
-                                    }}
-                                    className="w-full flex items-center gap-2 p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors font-medium cursor-pointer"
-                                >
-                                    <Store className="h-3.5 w-3.5 text-primary" />
-                                    + เพิ่มร้านใหม่
-                                </button>
-                            </>
-                        )}
+                        <div className="space-y-0.5 max-h-40 overflow-y-auto pr-0.5">
+                            {accessibleLocations.length === 0 ? (
+                                <div className="p-2 text-center text-[10px] text-muted-foreground">
+                                    ยังไม่มีสาขาในร้านนี้
+                                </div>
+                            ) : (
+                                accessibleLocations.map((loc) => {
+                                    const isSelected = selectedBranchId === loc.id;
+                                    return (
+                                        <button
+                                            key={loc.id}
+                                            onClick={() => {
+                                                setSelectedBranchId(loc.id);
+                                                setOpen(false);
+                                                toast.success(`เลือกสาขา: ${loc.name}`);
+                                            }}
+                                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors text-left cursor-pointer ${
+                                                isSelected
+                                                    ? "bg-primary/10 text-primary font-bold"
+                                                    : "hover:bg-muted text-muted-foreground hover:text-foreground font-medium"
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <Building2 className={`h-3.5 w-3.5 shrink-0 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="truncate">{loc.name}</span>
+                                                    {loc.code && (
+                                                        <span className="text-[9px] text-muted-foreground font-mono">
+                                                            {loc.code} • {loc.type || "warehouse"}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {isSelected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
 
-                        <button
-                            type="button"
+                    {/* Bottom Action Footer */}
+                    <div className="border-t border-border/60 pt-2 grid grid-cols-2 gap-1.5">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setOpen(false);
+                                setCreateStoreOpen(true);
+                            }}
+                            className="h-8 text-[11px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary justify-start px-2 gap-1.5 cursor-pointer"
+                        >
+                            <Plus className="h-3.5 w-3.5 text-primary" />
+                            + เพิ่มร้านใหม่
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => {
                                 setOpen(false);
                                 setJoinStoreOpen(true);
                             }}
-                            className="w-full flex items-center gap-2 p-1.5 text-xs text-primary hover:bg-primary/10 rounded-md transition-colors font-semibold cursor-pointer"
+                            className="h-8 text-[11px] font-semibold text-foreground hover:bg-indigo-500/10 hover:text-indigo-600 justify-start px-2 gap-1.5 cursor-pointer"
                         >
-                            <UserPlus className="h-3.5 w-3.5 text-primary" />
-                            เข้าร่วมร้านด้วยรหัส (Join Team)
-                        </button>
+                            <KeyRound className="h-3.5 w-3.5 text-indigo-500" />
+                            เข้าร่วมด้วยรหัส
+                        </Button>
                     </div>
                 </PopoverContent>
             </Popover>
 
-            {/* Modal 1: Switch Store Dialog */}
+            {/* Dialog 1: Create New Store */}
+            <CreateStoreDialog
+                open={createStoreOpen}
+                setOpen={setCreateStoreOpen}
+            />
+
+            {/* Dialog 2: Create New Branch/Location */}
+            <LocationDialog
+                open={createLocationOpen}
+                setOpen={setCreateLocationOpen}
+            />
+
+            {/* Dialog 3: Switch Store Modal */}
             <Dialog open={switchStoreOpen} onOpenChange={setSwitchStoreOpen}>
-                <DialogContent className="sm:max-w-[500px]">
+                <DialogContent className="sm:max-w-[420px]">
                     <DialogHeader>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5">
                             <div className="p-2 rounded-xl bg-primary/10 text-primary">
                                 <ArrowLeftRight className="h-5 w-5" />
                             </div>
                             <div>
-                                <DialogTitle className="text-base font-semibold">ร้านค้าและสาขาที่คุณทำงาน</DialogTitle>
+                                <DialogTitle className="text-base font-semibold">
+                                    สลับร้านค้าที่กำลังทำงาน
+                                </DialogTitle>
                                 <DialogDescription className="text-xs text-muted-foreground">
-                                    คลิกเลือกร้านค้าเพื่อสลับเข้าไปดูข้อมูลและจัดการสาขาที่ทำ
+                                    เลือกร้านค้าที่คุณเป็นเจ้าของหรือได้รับสิทธิ์เป็นทีมงาน
                                 </DialogDescription>
                             </div>
                         </div>
                     </DialogHeader>
 
-                    <div className="space-y-2.5 py-3 max-h-[340px] overflow-y-auto pr-1">
-                        {stores.map((s) => {
-                            const isCurrent = s.id === activeStoreId || s.store_name === displayStoreName;
-                            const isSwitching = switchingStoreId === s.id;
-                            const storeRole = s.user_role || (s.owner_id === s.id ? "owner" : "owner");
-                            const badge = roleLabels[storeRole] || roleLabels.owner;
-                            const storeBranches = s.branches || [];
+                    <div className="space-y-1.5 py-2 max-h-[280px] overflow-y-auto pr-1">
+                        {stores.map((store) => {
+                            const isCurrent = store.id === currentStoreObj?.id;
+                            const isSwitching = switchingStoreId === store.id;
+                            const roleInfo = roleLabels[store.user_role || "owner"] || roleLabels.owner;
 
                             return (
-                                <div
-                                    key={s.id}
-                                    className={`rounded-xl border transition-all overflow-hidden ${
+                                <button
+                                    key={store.id}
+                                    type="button"
+                                    onClick={() => !isCurrent && handleSelectStore(store)}
+                                    disabled={isCurrent || !!switchingStoreId}
+                                    className={`w-full flex items-center justify-between p-2.5 rounded-xl border transition-all duration-150 text-left cursor-pointer ${
                                         isCurrent
-                                            ? "border-primary/40 bg-primary/[0.03] shadow-2xs"
-                                            : "border-border/80 bg-card hover:border-primary/30"
+                                            ? "border-primary/40 bg-primary/5 text-foreground shadow-2xs font-bold"
+                                            : "border-border/70 hover:border-border hover:bg-muted/50 text-foreground"
                                     }`}
                                 >
-                                    {/* Store Main Bar */}
-                                    <div 
-                                        onClick={() => {
-                                            if (!isCurrent) {
-                                                handleSelectStore(s);
-                                            }
-                                        }}
-                                        className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/30 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-3 min-w-0">
-                                            <div className="h-10 w-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0 overflow-hidden">
-                                                {s.avatar_url ? (
-                                                    <img src={s.avatar_url} alt="" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    s.store_name?.charAt(0)?.toUpperCase() || "S"
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0 overflow-hidden">
+                                            {store.avatar_url ? (
+                                                <img src={store.avatar_url} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                                store.store_name?.charAt(0).toUpperCase() || "S"
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-xs font-semibold truncate max-w-[170px]">
+                                                    {store.store_name}
+                                                </span>
+                                                {isCurrent && (
+                                                    <span className="text-[8px] bg-primary text-primary-foreground font-bold px-1.5 py-0.2 rounded-full">
+                                                        กำลังใช้งาน
+                                                    </span>
                                                 )}
                                             </div>
-                                            <div className="flex flex-col min-w-0">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="text-xs font-bold text-foreground truncate">{s.store_name}</span>
-                                                    <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded border ${badge.color}`}>
-                                                        {badge.label}
-                                                    </span>
-                                                </div>
-                                                <span className="text-[10px] text-muted-foreground truncate">
-                                                    {s.tax_id ? `Tax ID: ${s.tax_id}` : s.store_address || "ร้านค้าที่คุณทำงาน"}
+                                            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                                                <span className={`px-1 rounded border text-[8px] font-bold ${roleInfo.color}`}>
+                                                    {roleInfo.label}
                                                 </span>
+                                                {store.tax_id && <span>Tax: {store.tax_id}</span>}
                                             </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            {isSwitching ? (
-                                                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                                            ) : isCurrent ? (
-                                                <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 flex items-center gap-1">
-                                                    <Check className="h-3 w-3" /> ใช้งานอยู่
-                                                </span>
-                                            ) : (
-                                                <Button size="sm" variant="outline" className="h-7 text-[11px] font-semibold px-2.5 text-primary border-primary/30 hover:bg-primary/10">
-                                                    สลับเข้าร้านนี้
-                                                </Button>
-                                            )}
                                         </div>
                                     </div>
 
-                                    {/* Branches in this store */}
-                                    {storeBranches.length > 0 && (
-                                        <div className="px-3 py-2 bg-muted/20 border-t border-border/40 space-y-1">
-                                            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">
-                                                สาขาที่คุณทำในร้านนี้ ({storeBranches.length} สาขา):
-                                            </span>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                                {storeBranches.map((b: any) => (
-                                                    <div 
-                                                        key={b.id} 
-                                                        className="flex items-center gap-1.5 p-1.5 rounded-md bg-background border border-border/60 text-xs"
-                                                    >
-                                                        <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                                                        <div className="flex flex-col min-w-0">
-                                                            <span className="font-semibold truncate text-[11px]">{b.name}</span>
-                                                            <span className="text-[9px] text-muted-foreground truncate">
-                                                                {b.code ? `รหัส: ${b.code}` : b.address || "สาขา / คลัง"}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
+                                    {isSwitching ? (
+                                        <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
+                                    ) : isCurrent ? (
+                                        <Check className="h-4 w-4 text-primary shrink-0" />
+                                    ) : (
+                                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                                     )}
-                                </div>
+                                </button>
                             );
                         })}
                     </div>
 
-                    <DialogFooter className="flex-row items-center justify-between sm:justify-between border-t border-border pt-3">
+                    <DialogFooter className="pt-2">
                         <Button
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             onClick={() => {
                                 setSwitchStoreOpen(false);
-                                setJoinStoreOpen(true);
+                                setCreateStoreOpen(true);
                             }}
-                            className="h-8 text-xs font-semibold gap-1 text-primary cursor-pointer"
+                            className="w-full h-8 text-xs font-semibold gap-1.5 text-primary border-primary/30 hover:bg-primary/10 cursor-pointer"
                         >
-                            <UserPlus className="h-3.5 w-3.5" />
-                            ใส่รหัสเข้าร่วมร้าน
+                            <Plus className="h-3.5 w-3.5" />
+                            + เพิ่มร้านค้าใหม่อีกร้าน
                         </Button>
-
-                        {effectiveRole === "owner" && (
-                            <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => {
-                                    setSwitchStoreOpen(false);
-                                    setCreateStoreOpen(true);
-                                }}
-                                className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
-                            >
-                                <Plus className="h-3.5 w-3.5" />
-                                สร้างร้านใหม่
-                            </Button>
-                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* Modal 2: Join Store with Code Dialog */}
+            {/* Dialog 4: Join Store with Code Modal */}
             <Dialog open={joinStoreOpen} onOpenChange={setJoinStoreOpen}>
                 <DialogContent className="sm:max-w-[400px]">
                     <form onSubmit={handleJoinSubmit}>
                         <DialogHeader>
                             <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600">
                                     <KeyRound className="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <DialogTitle className="text-base font-semibold">เข้าร่วมทีมร้านค้า</DialogTitle>
+                                    <DialogTitle className="text-base font-semibold">
+                                        เข้าร่วมทีมร้านค้า
+                                    </DialogTitle>
                                     <DialogDescription className="text-xs text-muted-foreground">
-                                        กรอกรหัสเชิญ (เช่น MF-A8B9C2) ที่ได้รับจากเจ้าของร้าน
+                                        กรอกรหัส 6 หลักที่ได้รับจากเจ้าของร้านเพื่อเข้าทำงาน
                                     </DialogDescription>
                                 </div>
                             </div>
                         </DialogHeader>
 
-                        <div className="py-4 space-y-3">
+                        <div className="space-y-3 py-4">
                             <div className="space-y-1.5">
                                 <Label htmlFor="join-code" className="text-xs font-semibold">
                                     รหัสร้านค้า (Store Code) *
@@ -469,10 +451,10 @@ export function StoreBranchDropdown({
                                     id="join-code"
                                     value={joinCode}
                                     onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                                    placeholder="MF-XXXXXX"
-                                    className="h-11 text-center font-mono text-lg tracking-widest uppercase font-bold"
+                                    placeholder="เช่น MATE-8899"
+                                    maxLength={15}
+                                    className="h-10 text-center text-sm font-mono tracking-widest uppercase font-bold"
                                     required
-                                    maxLength={10}
                                 />
                             </div>
                         </div>
@@ -491,27 +473,15 @@ export function StoreBranchDropdown({
                                 type="submit"
                                 size="sm"
                                 disabled={joining}
-                                className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
+                                className="h-8 text-xs font-semibold gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
                             >
-                                {joining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                                ยืนยันการเข้าร่วม
+                                {joining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                                เข้าร่วมร้านค้า
                             </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>
-
-            {/* Modal 3: Create Store Dialog */}
-            <CreateStoreDialog
-                open={createStoreOpen}
-                setOpen={setCreateStoreOpen}
-            />
-
-            {/* Modal 4: Location Dialog */}
-            <LocationDialog
-                open={createLocationOpen}
-                setOpen={setCreateLocationOpen}
-            />
         </>
     );
 }
