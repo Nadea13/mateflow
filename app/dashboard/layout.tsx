@@ -16,9 +16,9 @@ export default async function DashboardLayout({
     const role = profile?.role || 'owner';
     const assignedBranchId = profile?.assigned_branch_id || null;
 
-    // Guaranteed store name resolution
+    // Guaranteed store resolution
     const currentActiveStore = stores.find(s => s.id === storeProfile?.id) || stores[0];
-    const storeName = storeProfile?.store_name || currentActiveStore?.store_name || profile?.store_name || "My Store";
+    const storeName = storeProfile?.store_name || currentActiveStore?.store_name || "";
     const activeStoreId = storeProfile?.id || currentActiveStore?.id || "";
 
     return (

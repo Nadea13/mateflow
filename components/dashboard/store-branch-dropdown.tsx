@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -41,8 +41,9 @@ export function StoreBranchDropdown({
     const [switchingStoreId, setSwitchingStoreId] = useState<string | null>(null);
 
     // Find current active store object
-    const currentStoreObj = stores.find(s => s.id === activeStoreId) || stores[0];
-    const displayStoreName = initialStoreName?.trim() || currentStoreObj?.store_name || "MateFlow Store";
+    const currentStoreObj = stores.find(s => s.id === activeStoreId) || (stores.length > 0 ? stores[0] : null);
+    const hasAnyStore = !!currentStoreObj || (initialStoreName && initialStoreName.trim().length > 0 && initialStoreName !== "My Store");
+    const displayStoreName = initialStoreName?.trim() || currentStoreObj?.store_name || "";
     const effectiveRole = currentStoreObj?.user_role || userRole || "owner";
 
     // Filter accessible locations based on employee assigned_branch_id
@@ -118,32 +119,54 @@ export function StoreBranchDropdown({
 
     return (
         <>
-            <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                    <button className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-border/80 bg-sidebar-accent/50 hover:bg-sidebar-accent hover:border-border transition-all duration-150 text-left shadow-2xs group cursor-pointer">
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div className={`p-2 rounded-lg ${currentRoleBadge.iconBg} shrink-0 shadow-2xs`}>
-                                <Store className="h-4 w-4" />
-                            </div>
-                            <div className="flex flex-col min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-1.5 leading-none">
-                                    <span className="text-xs font-bold text-foreground truncate max-w-[110px]" title={displayStoreName}>
-                                        {displayStoreName}
-                                    </span>
-                                    {/* Role Badge Indicator */}
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${currentRoleBadge.color}`}>
-                                        {currentRoleBadge.label}
+            {!hasAnyStore ? (
+                /* When user has NO stores yet -> Show clean Create Store Button */
+                <button
+                    type="button"
+                    onClick={() => setCreateStoreOpen(true)}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary transition-all duration-150 text-left shadow-2xs group cursor-pointer"
+                >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="p-2 rounded-lg bg-primary text-primary-foreground shrink-0 shadow-2xs">
+                            <Plus className="h-4 w-4" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-xs font-bold truncate">
+                                + สร้างร้านค้าใหม่
+                            </span>
+                            <span className="text-[10px] text-primary/80 truncate">
+                                คลิกเพื่อเริ่มต้นสร้างร้าน
+                            </span>
+                        </div>
+                    </div>
+                </button>
+            ) : (
+                <Popover open={open} onOpenChange={setOpen}>
+                    <PopoverTrigger asChild>
+                        <button className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-border/80 bg-sidebar-accent/50 hover:bg-sidebar-accent hover:border-border transition-all duration-150 text-left shadow-2xs group cursor-pointer">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <div className={`p-2 rounded-lg ${currentRoleBadge.iconBg} shrink-0 shadow-2xs`}>
+                                    <Store className="h-4 w-4" />
+                                </div>
+                                <div className="flex flex-col min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-1.5 leading-none">
+                                        <span className="text-xs font-bold text-foreground truncate max-w-[110px]" title={displayStoreName}>
+                                            {displayStoreName}
+                                        </span>
+                                        {/* Role Badge Indicator */}
+                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${currentRoleBadge.color}`}>
+                                            {currentRoleBadge.label}
+                                        </span>
+                                    </div>
+                                    <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1.5 leading-none">
+                                        <Building2 className="h-2.5 w-2.5 text-primary shrink-0" />
+                                        <span className="truncate max-w-[120px] font-medium">{branchLabel}</span>
                                     </span>
                                 </div>
-                                <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1.5 leading-none">
-                                    <Building2 className="h-2.5 w-2.5 text-primary shrink-0" />
-                                    <span className="truncate max-w-[120px] font-medium">{branchLabel}</span>
-                                </span>
                             </div>
-                        </div>
-                        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${open ? "rotate-180 text-foreground" : ""}`} />
-                    </button>
-                </PopoverTrigger>
+                            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${open ? "rotate-180 text-foreground" : ""}`} />
+                        </button>
+                    </PopoverTrigger>
 
                 <PopoverContent align="start" side="bottom" className="w-80 p-2.5 shadow-2xl border-border bg-popover/95 backdrop-blur-xl rounded-xl space-y-2.5 z-50">
                     {/* Active Store Card */}
@@ -300,6 +323,7 @@ export function StoreBranchDropdown({
                     </div>
                 </PopoverContent>
             </Popover>
+            )}
 
             {/* Modal 1: Switch Store Dialog */}
             <Dialog open={switchStoreOpen} onOpenChange={setSwitchStoreOpen}>
