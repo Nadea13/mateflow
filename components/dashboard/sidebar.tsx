@@ -90,7 +90,7 @@ export function Sidebar({
     const { t } = useTranslation()
 
     return (
-        <aside className="hidden border-r border-border bg-sidebar md:flex md:w-60 md:flex-col md:fixed md:inset-y-0 print:hidden z-40">
+        <aside className="hidden border-r border-border bg-sidebar md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 print:hidden z-40">
             <div className="flex flex-col flex-grow pt-4 overflow-y-auto">
                 {/* Brand Header */}
                 <div className="flex items-center px-4 mb-3">

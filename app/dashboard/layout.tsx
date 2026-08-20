@@ -16,8 +16,10 @@ export default async function DashboardLayout({
     const role = profile?.role || 'owner';
     const assignedBranchId = profile?.assigned_branch_id || null;
 
-    const storeName = storeProfile?.store_name || "";
-    const activeStoreId = storeProfile?.id || "";
+    // Guaranteed store name resolution
+    const currentActiveStore = stores.find(s => s.id === storeProfile?.id) || stores[0];
+    const storeName = storeProfile?.store_name || currentActiveStore?.store_name || profile?.store_name || "My Store";
+    const activeStoreId = storeProfile?.id || currentActiveStore?.id || "";
 
     return (
         <div className="flex min-h-screen w-full overflow-x-hidden bg-background text-foreground">
@@ -29,7 +31,7 @@ export default async function DashboardLayout({
                 stores={stores}
                 locations={locations}
             />
-            <div className="flex-1 md:pl-60 flex flex-col min-w-0 w-full overflow-x-hidden">
+            <div className="flex-1 md:pl-64 flex flex-col min-w-0 w-full overflow-x-hidden">
                 <TopBar />
                 <main className="flex-1 pb-20 md:pb-8 min-w-0 w-full overflow-x-hidden">
                     <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 py-6 w-full">
