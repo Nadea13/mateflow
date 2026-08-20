@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { History, ChevronRight, Store, ArrowRight } from "lucide-react";
 import { TeamManagement } from "@/components/settings/team-management";
 import { Button } from "@/components/ui/button";
+import { Branch } from "@/types";
 
 interface SettingsContentProps {
     authProfile: {
@@ -24,9 +25,10 @@ interface SettingsContentProps {
     };
     storeProfile: any;
     teamMembers: any[];
+    branches?: Branch[];
 }
 
-export function SettingsContent({ authProfile, storeProfile, teamMembers }: SettingsContentProps) {
+export function SettingsContent({ authProfile, storeProfile, teamMembers, branches = [] }: SettingsContentProps) {
     const { t } = useTranslation();
 
     return (
@@ -53,7 +55,7 @@ export function SettingsContent({ authProfile, storeProfile, teamMembers }: Sett
                 </CardHeader>
                 <CardContent className="pt-0">
                     <Link href="/dashboard/store">
-                        <Button variant="outline" size="sm" className="h-8 text-xs font-semibold gap-1.5 border-primary/30 hover:bg-primary/10 text-primary">
+                        <Button variant="outline" size="sm" className="h-8 text-xs font-semibold gap-1.5 border-primary/30 hover:bg-primary/10 text-primary cursor-pointer">
                             ไปยังหน้าจัดการร้านค้าและสาขา
                             <ArrowRight className="h-3.5 w-3.5" />
                         </Button>
@@ -74,7 +76,7 @@ export function SettingsContent({ authProfile, storeProfile, teamMembers }: Sett
                         <CardDescription>{t("settings.teamDesc")}</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <TeamManagement members={teamMembers} />
+                        <TeamManagement members={teamMembers} branches={branches} />
                     </CardContent>
                 </Card>
             )}
