@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
@@ -87,26 +87,71 @@ export async function getProfile() {
         email: user.email || "",
         store_name: profile?.store_name || "",
         avatar_url: profile?.avatar_url || "",
+        store_address: profile?.store_address || "",
+        tax_id: profile?.tax_id || "",
+        signature_url: profile?.signature_url || "",
+        store_phone: profile?.store_phone || "",
     };
 }
 
-export async function updateProfile(data: { store_name?: string; store_address?: string; tax_id?: string; store_phone?: string }) {
+export async function getTeamMembers() {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return [];
+
+    const { data, error } = await supabase
+        .from("team_members")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+    if (error) {
+        console.error("Error fetching team members:", error);
+        return [];
+    }
+
+    return data || [];
+}
+
+export async function signOutUser() {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    await supabase.auth.signOut();
+    redirect("/login");
+}
+
+export async function softDeleteAccount() {
+    return deleteAccount();
+}
+
+export async function updateProfile(data: { 
+    store_name?: string; 
+    store_address?: string; 
+    tax_id?: string; 
+    store_phone?: string;
+    signature_url?: string;
+}) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) return { error: "Unauthorized" };
 
+    const updatePayload: any = {
+        id: user.id,
+        updated_at: new Date().toISOString(),
+    };
+
+    if (data.store_name !== undefined) updatePayload.store_name = data.store_name;
+    if (data.store_address !== undefined) updatePayload.store_address = data.store_address;
+    if (data.tax_id !== undefined) updatePayload.tax_id = data.tax_id;
+    if (data.store_phone !== undefined) updatePayload.store_phone = data.store_phone;
+    if (data.signature_url !== undefined) updatePayload.signature_url = data.signature_url;
+
     const { error } = await supabase
         .from("profiles")
-        .upsert({
-            id: user.id,
-            store_name: data.store_name,
-            store_address: data.store_address,
-            tax_id: data.tax_id,
-            store_phone: data.store_phone,
-            updated_at: new Date().toISOString(),
-        });
+        .upsert(updatePayload);
 
     if (error) {
         console.error("Error updating profile:", error);
@@ -114,6 +159,8 @@ export async function updateProfile(data: { store_name?: string; store_address?:
     }
 
     revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard/store");
+    revalidatePath("/dashboard");
     return { success: true };
 }
 
@@ -140,51 +187,32 @@ export async function updateETaxSettings(data: { etax_enabled: boolean; etax_api
     }
 
     revalidatePath("/dashboard/tax");
-    revalidatePath("/dashboard/settings");
     return { success: true };
 }
 
-export async function uploadSignature(formData: FormData) {
+export async function updateStripeKeys(data: { stripe_publishable_key?: string; stripe_secret_key?: string }) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) return { error: "Unauthorized" };
 
-    const file = formData.get("signature") as File;
-    if (!file) return { error: "No file provided" };
-
-    const fileExt = file.name.split(".").pop();
-    const filePath = `${user.id}/signature.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(filePath, file, { upsert: true });
-
-    if (uploadError) {
-        console.error("Error uploading signature:", uploadError);
-        return { error: "Failed to upload image" };
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-        .from("avatars")
-        .getPublicUrl(filePath);
-
-    const { error: profileError } = await supabase
+    const { error } = await supabase
         .from("profiles")
         .upsert({
             id: user.id,
-            signature_url: publicUrl,
+            stripe_publishable_key: data.stripe_publishable_key,
+            stripe_secret_key: data.stripe_secret_key,
             updated_at: new Date().toISOString(),
         });
 
-    if (profileError) {
-        console.error("Error updating signature URL:", profileError);
-        return { error: "Failed to save signature" };
+    if (error) {
+        console.error("Error updating Stripe keys:", error);
+        return { error: "Failed to update Stripe keys" };
     }
 
     revalidatePath("/dashboard/settings");
-    return { success: true, signature_url: publicUrl };
+    return { success: true };
 }
 
 export async function uploadAvatar(formData: FormData) {
@@ -198,25 +226,23 @@ export async function uploadAvatar(formData: FormData) {
     if (!file) return { error: "No file provided" };
 
     const fileExt = file.name.split(".").pop();
-    const filePath = `${user.id}/avatar.${fileExt}`;
+    const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+    const filePath = `avatars/${fileName}`;
 
-    // Upload to storage
     const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(filePath, file, { upsert: true });
+        .upload(filePath, file);
 
     if (uploadError) {
-        console.error("Error uploading avatar:", uploadError);
-        return { error: "Failed to upload image" };
+        console.error("Upload error:", uploadError);
+        return { error: "Failed to upload avatar" };
     }
 
-    // Get public URL
     const { data: { publicUrl } } = supabase.storage
         .from("avatars")
         .getPublicUrl(filePath);
 
-    // Update profile with avatar URL
-    const { error: profileError } = await supabase
+    const { error: updateError } = await supabase
         .from("profiles")
         .upsert({
             id: user.id,
@@ -224,58 +250,86 @@ export async function uploadAvatar(formData: FormData) {
             updated_at: new Date().toISOString(),
         });
 
-    if (profileError) {
-        console.error("Error updating avatar URL:", profileError);
-        return { error: "Failed to save avatar" };
+    if (updateError) {
+        return { error: "Failed to update profile with avatar" };
     }
 
     revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard/store");
     return { success: true, avatar_url: publicUrl };
 }
 
-export async function softDeleteAccount() {
+export async function uploadSignature(formData: FormData) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) return { error: "Unauthorized" };
 
-    const { error } = await supabase
-        .from("profiles")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", user.id);
+    const file = formData.get("signature") as File;
+    if (!file) return { error: "No file provided" };
 
-    if (error) {
-        console.error("Error soft deleting account:", error);
-        return { error: "Failed to delete account" };
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${user.id}-sig-${Math.random()}.${fileExt}`;
+    const filePath = `signatures/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file);
+
+    if (uploadError) {
+        console.error("Upload error:", uploadError);
+        return { error: "Failed to upload signature" };
     }
 
-    // Sign out the user
-    await supabase.auth.signOut();
+    const { data: { publicUrl } } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
 
-    return { success: true };
+    const { error: updateError } = await supabase
+        .from("profiles")
+        .upsert({
+            id: user.id,
+            signature_url: publicUrl,
+            updated_at: new Date().toISOString(),
+        });
+
+    if (updateError) {
+        return { error: "Failed to update profile with signature" };
+    }
+
+    revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard/store");
+    return { success: true, signature_url: publicUrl };
 }
 
-export async function signOutUser() {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-    await supabase.auth.signOut();
-    redirect("/login");
-}
-
-export async function getTeamMembers() {
+export async function deleteAccount() {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) return [];
+    if (!user) return { error: "Unauthorized" };
 
-    const { data, error } = await supabase.rpc("get_team_members");
+    // 1. Delete transactions/bills/expenses/products
+    await supabase.from("bills").delete().eq("user_id", user.id);
+    await supabase.from("expenses").delete().eq("user_id", user.id);
+    await supabase.from("products").delete().eq("user_id", user.id);
+    await supabase.from("customers").delete().eq("user_id", user.id);
+    await supabase.from("suppliers").delete().eq("user_id", user.id);
+    await supabase.from("purchase_orders").delete().eq("user_id", user.id);
+
+    // 2. Delete Profile
+    const { error } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", user.id);
 
     if (error) {
-        console.error("Error fetching team members:", JSON.stringify(error, null, 2));
-        return [];
+        console.error("Error deleting profile:", error);
+        return { error: "Failed to delete profile data" };
     }
 
-    return data || [];
+    // 3. Sign out session
+    await supabase.auth.signOut();
+    redirect("/login");
 }
