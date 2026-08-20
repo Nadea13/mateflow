@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { updateProfile, uploadAvatar, uploadSignature } from "@/lib/actions/profile";
-import { useToast } from "@/hooks/use-toast";
-import { Camera, Save, Store, Upload, Phone } from "lucide-react";
+import { updateProfile } from "@/lib/actions/profile";
+import { ImageUploadZone } from "@/components/ui/image-upload-zone";
+import { toast } from "sonner";
+import { Camera, Save, Store, Upload, Phone, FileCheck2, PenTool, Loader2, X } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/provider";
 
 interface StoreFormProps {
@@ -34,11 +35,8 @@ export function StoreForm({ store }: StoreFormProps) {
     const [signatureUrl, setSignatureUrl] = useState(store?.signature_url || "");
     const [storePhone, setStorePhone] = useState(store?.store_phone || "");
     const [saving, setSaving] = useState(false);
-    const [uploading, setUploading] = useState(false);
-    const [uploadingSig, setUploadingSig] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const sigInputRef = useRef<HTMLInputElement>(null);
-    const { toast } = useToast();
+    const [uploadingLogo, setUploadingLogo] = useState(false);
+    const logoInputRef = useRef<HTMLInputElement>(null);
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
 
@@ -53,6 +51,59 @@ export function StoreForm({ store }: StoreFormProps) {
         }
     }, [store]);
 
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const objectUrl = URL.createObjectURL(file);
+        setAvatarUrl(objectUrl);
+        setUploadingLogo(true);
+
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("folder", "avatars");
+
+            const res = await fetch("/api/upload", {
+                method: "POST",
+                body: formData,
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || "Upload failed");
+            }
+
+            setAvatarUrl(data.url);
+            
+            // Auto save avatar to profile
+            await updateProfile({
+                avatar_url: data.url,
+            });
+
+            toast.success("อัปโหลดและแปลงโลโก้เป็น AVIF บน Cloudflare เรียบร้อย!");
+            startTransition(() => {
+                router.refresh();
+            });
+        } catch (err: any) {
+            console.error("Logo upload error:", err);
+            toast.error(err.message || "Failed to upload logo");
+            setAvatarUrl(store?.avatar_url || "");
+        } finally {
+            setUploadingLogo(false);
+        }
+    };
+
+    const handleRemoveLogo = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setAvatarUrl("");
+        if (logoInputRef.current) logoInputRef.current.value = "";
+        await updateProfile({
+            avatar_url: "",
+        });
+        router.refresh();
+    };
+
     const handleSave = async () => {
         setSaving(true);
         try {
@@ -61,211 +112,175 @@ export function StoreForm({ store }: StoreFormProps) {
                 store_address: storeAddress,
                 tax_id: taxId,
                 store_phone: storePhone,
+                avatar_url: avatarUrl || undefined,
+                signature_url: signatureUrl || undefined,
             }) as any;
+
             if (result.success) {
-                toast({ title: "Saved", description: "Store profile updated." });
+                toast.success("บันทึกข้อมูลร้านค้าเรียบร้อยแล้ว");
                 startTransition(() => {
                     router.refresh();
                 });
             } else {
-                toast({ title: "Error", description: result.error, variant: "destructive" });
+                toast.error(result.error || "Failed to save");
             }
         } catch {
-            toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
+            toast.error("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
         } finally {
             setSaving(false);
         }
     };
 
-    const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const previewUrl = URL.createObjectURL(file);
-        setAvatarUrl(previewUrl);
-
-        setUploading(true);
-        try {
-            const formData = new FormData();
-            formData.append("avatar", file);
-            const result = await uploadAvatar(formData) as any;
-            if (result.success) {
-                setAvatarUrl(result.avatar_url);
-                toast({ title: "Uploaded", description: "Store logo updated." });
-            } else {
-                toast({ title: "Error", description: result.error, variant: "destructive" });
-                setAvatarUrl(store.avatar_url);
-            }
-        } catch {
-            toast({ title: "Error", description: "This failed to upload.", variant: "destructive" });
-            setAvatarUrl(store.avatar_url);
-        } finally {
-            setUploading(false);
-        }
-    };
-
-    const handleSignatureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const previewUrl = URL.createObjectURL(file);
-        setSignatureUrl(previewUrl);
-
-        setUploadingSig(true);
-        try {
-            const formData = new FormData();
-            formData.append("signature", file);
-            const result = await uploadSignature(formData) as any;
-            if (result.success) {
-                setSignatureUrl(result.signature_url);
-                toast({ title: "Uploaded", description: "Signature uploaded." });
-            } else {
-                toast({ title: "Error", description: result.error, variant: "destructive" });
-                setSignatureUrl(store.signature_url);
-            }
-        } catch {
-            toast({ title: "Error", description: "Failed to upload.", variant: "destructive" });
-            setSignatureUrl(store.signature_url);
-        } finally {
-            setUploadingSig(false);
-        }
-    };
-
-    const initials = storeName ? storeName.charAt(0).toUpperCase() : "S";
-
     return (
-        <Card className="max-w-2xl">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    {t("settings.storeInfo")}
+        <Card className="max-w-2xl border border-border bg-card shadow-xs">
+            <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Store className="h-4 w-4 text-primary" />
+                    ข้อมูลร้านค้าและหัวบิล
                 </CardTitle>
-                <CardDescription>Store information will appear on quotations and receipts.</CardDescription>
+                <CardDescription className="text-xs">
+                    ข้อมูลนี้จะนำไปแสดงบนหัวใบเสร็จรับเงิน ใบกำกับภาษี และระบบพิมพ์เอกสารทั้งหมด
+                </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-                {/* Store Logo */}
-                <div className="flex items-center gap-6">
-                    <div className="relative group">
-                        <Avatar className="h-20 w-20 border-2 border-border">
-                            <AvatarImage src={avatarUrl} alt="Store Logo" />
-                            <AvatarFallback className="text-xl font-bold bg-primary/10 text-primary">
-                                {initials}
-                            </AvatarFallback>
-                        </Avatar>
-                        <button
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={uploading}
-                            className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-                        >
-                            <Camera className="h-5 w-5 text-white" />
-                        </button>
+            <CardContent className="space-y-5">
+                {/* 1:1 Aspect Ratio Logo Dropzone */}
+                <div className="flex flex-col items-center justify-center space-y-1.5 pb-2">
+                    <div
+                        onClick={() => logoInputRef.current?.click()}
+                        className={`relative w-28 h-28 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-200 flex flex-col items-center justify-center overflow-hidden ${
+                            avatarUrl
+                                ? "border-primary/40 bg-primary/5 hover:border-primary"
+                                : "border-border/80 bg-muted/20 hover:border-border hover:bg-muted/40"
+                        }`}
+                    >
                         <input
-                            ref={fileInputRef}
+                            ref={logoInputRef}
                             type="file"
                             accept="image/*"
-                            onChange={handleAvatarChange}
+                            onChange={handleLogoUpload}
                             className="hidden"
+                            disabled={uploadingLogo}
+                        />
+
+                        {avatarUrl ? (
+                            <div className="relative w-full h-full flex items-center justify-center group">
+                                <img
+                                    src={avatarUrl}
+                                    alt="Store Logo"
+                                    className="w-full h-full object-cover"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveLogo}
+                                    className="absolute top-1.5 right-1.5 p-1 bg-background/80 hover:bg-destructive hover:text-destructive-foreground text-muted-foreground rounded-full shadow-xs transition-colors backdrop-blur-xs cursor-pointer"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                                {uploadingLogo && (
+                                    <div className="absolute inset-0 bg-background/60 flex items-center justify-center backdrop-blur-2xs">
+                                        <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center p-2 text-center">
+                                {uploadingLogo ? (
+                                    <Loader2 className="h-6 w-6 text-primary animate-spin mb-1" />
+                                ) : (
+                                    <div className="p-2 rounded-full bg-primary/10 text-primary mb-1">
+                                        <Upload className="h-4 w-4" />
+                                    </div>
+                                )}
+                                <p className="text-[11px] font-semibold text-foreground leading-tight">
+                                    {uploadingLogo ? "กำลังอัปโหลด..." : "โลโก้ร้านค้า"}
+                                </p>
+                                <p className="text-[9px] text-muted-foreground mt-0.5">
+                                    1:1 Auto AVIF
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Form Fields */}
+                <div className="grid gap-3.5">
+                    {/* Store Name */}
+                    <div className="space-y-1.5">
+                        <Label htmlFor="edit-store-name" className="text-xs font-semibold">ชื่อร้านค้า / บริษัท *</Label>
+                        <Input
+                            id="edit-store-name"
+                            value={storeName}
+                            onChange={(e) => setStoreName(e.target.value)}
+                            placeholder="เช่น Mateflow Official Store"
+                            className="h-9 text-xs"
                         />
                     </div>
-                    <div>
-                        <p className="text-sm font-medium text-foreground">
-                            {uploading ? "Uploading..." : "Store Logo"}
+
+                    {/* Phone & Tax ID */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="edit-store-phone" className="text-xs font-semibold">เบอร์โทรศัพท์</Label>
+                            <Input
+                                id="edit-store-phone"
+                                value={storePhone}
+                                onChange={(e) => setStorePhone(e.target.value)}
+                                placeholder="08X-XXX-XXXX"
+                                className="h-9 text-xs"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="edit-tax-id" className="text-xs font-semibold">เลขประจำตัวผู้เสียภาษี (Tax ID)</Label>
+                            <Input
+                                id="edit-tax-id"
+                                value={taxId}
+                                onChange={(e) => setTaxId(e.target.value)}
+                                placeholder="เลข 13 หลัก"
+                                maxLength={13}
+                                className="h-9 text-xs font-mono"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Store Address */}
+                    <div className="space-y-1.5">
+                        <Label htmlFor="edit-store-address" className="text-xs font-semibold">ที่อยู่ร้านค้า / สำนักงานใหญ่</Label>
+                        <Textarea
+                            id="edit-store-address"
+                            value={storeAddress}
+                            onChange={(e) => setStoreAddress(e.target.value)}
+                            placeholder="ที่อยู่สำหรับแสดงบนหัวบิลและใบกำกับภาษี"
+                            className="text-xs min-h-[60px]"
+                        />
+                    </div>
+
+                    {/* Authorized Signature Upload */}
+                    <div className="space-y-1.5 border-t border-border/60 pt-3">
+                        <Label className="text-xs font-semibold block mb-1">ลายเซ็นต์ผู้มีอำนาจ</Label>
+                        <ImageUploadZone
+                            value={signatureUrl}
+                            onChange={(url) => setSignatureUrl(url)}
+                            folder="signatures"
+                            label=""
+                            className="w-full"
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                            แปลงและจัดเก็บเป็นไฟล์ AVIF คุณภาพสูงโดยอัตโนมัติ
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">Click to change · JPG, PNG max 2MB</p>
                     </div>
                 </div>
 
-                {/* Store Name */}
-                <div className="grid gap-1.5">
-                    <Label htmlFor="store_name">{t("settings.storeName")}</Label>
-                    <Input
-                        id="store_name"
-                        value={storeName}
-                        onChange={(e) => setStoreName(e.target.value)}
-                        placeholder="e.g. MateFlow Coffee"
-                    />
+                {/* Save Button */}
+                <div className="pt-2 flex justify-end">
+                    <Button
+                        onClick={handleSave}
+                        disabled={saving}
+                        size="sm"
+                        className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground"
+                    >
+                        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                        บันทึกข้อมูลร้านค้า
+                    </Button>
                 </div>
-
-                {/* Store Phone */}
-                <div className="grid gap-1.5">
-                    <Label htmlFor="store_phone">{t("settings.storePhone")}</Label>
-                    <Input
-                        id="store_phone"
-                        value={storePhone}
-                        onChange={(e) => setStorePhone(e.target.value)}
-                        placeholder="e.g. 02-123-4567 or 081-234-5678"
-                    />
-                </div>
-
-                {/* Store Address */}
-                <div className="grid gap-1.5">
-                    <Label htmlFor="store_address">{t("settings.storeAddress")}</Label>
-                    <Textarea
-                        id="store_address"
-                        value={storeAddress}
-                        onChange={(e) => setStoreAddress(e.target.value)}
-                        placeholder="e.g. 123/45 Sukhumvit Rd., Klongtoey, Bangkok 10110"
-                        rows={3}
-                    />
-                </div>
-
-                {/* Tax ID */}
-                <div className="grid gap-1.5">
-                    <Label htmlFor="tax_id">{t("settings.taxId")}</Label>
-                    <Input
-                        id="tax_id"
-                        value={taxId}
-                        onChange={(e) => setTaxId(e.target.value)}
-                        placeholder="e.g. 0-1234-56789-01-2"
-                        maxLength={20}
-                    />
-                </div>
-
-                {/* Signature / Stamp Upload */}
-                <div className="grid gap-1.5">
-                    <Label>{t("settings.signature")}</Label>
-                    <p className="text-xs text-muted-foreground">Appears on documents (Transparent PNG recommended)</p>
-                    {signatureUrl ? (
-                        <div className="relative group w-fit">
-                            <div className="border rounded-lg p-3 bg-muted/50 inline-block">
-                                <img
-                                    src={signatureUrl}
-                                    alt="Signature"
-                                    className="h-20 max-w-[200px] object-contain"
-                                />
-                            </div>
-                            <button
-                                onClick={() => sigInputRef.current?.click()}
-                                disabled={uploadingSig}
-                                className="absolute inset-0 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-                            >
-                                <Camera className="h-5 w-5 text-white" />
-                            </button>
-                        </div>
-                    ) : (
-                        <button
-                            onClick={() => sigInputRef.current?.click()}
-                            disabled={uploadingSig}
-                            className="flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg p-6 hover:border-primary/50 hover:bg-muted/50 transition-colors cursor-pointer"
-                        >
-                            <Upload className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">
-                                {uploadingSig ? "Uploading..." : "Upload Signature / Stamp"}
-                            </span>
-                        </button>
-                    )}
-                    <input
-                        ref={sigInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleSignatureChange}
-                        className="hidden"
-                    />
-                </div>
-
-                <Button onClick={handleSave} size="sm" disabled={saving} className="h-8 text-xs gap-1.5 font-medium w-full sm:w-auto">
-                    <Save className="h-3.5 w-3.5" />
-                    {saving ? "Saving..." : "Save Store Details"}
-                </Button>
             </CardContent>
         </Card>
     );
