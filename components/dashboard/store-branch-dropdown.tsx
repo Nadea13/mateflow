@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, Sparkles, UserPlus, KeyRound, Shield, ShieldCheck, MapPin } from "lucide-react";
+import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, Sparkles, UserPlus, KeyRound, Shield, ShieldCheck, MapPin, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { switchActiveStore } from "@/lib/actions/profile";
 import { joinStoreWithCode } from "@/app/actions/team";
@@ -39,6 +39,9 @@ export function StoreBranchDropdown({
     const [joinCode, setJoinCode] = useState("");
     const [joining, setJoining] = useState(false);
     const [switchingStoreId, setSwitchingStoreId] = useState<string | null>(null);
+
+    // Selected Store inside Switch Modal (to expand and view its branches)
+    const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
 
     // Filter accessible locations based on employee assigned_branch_id
     const accessibleLocations = assignedBranchId 
@@ -184,7 +187,7 @@ export function StoreBranchDropdown({
                     {/* Branches List Header */}
                     <div className="px-1 flex items-center justify-between">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            สาขาที่คุณเข้าถึงได้ ({accessibleLocations.length > 0 ? accessibleLocations.length : 1})
+                            สาขาที่คุณเข้าทำงาน ({accessibleLocations.length > 0 ? accessibleLocations.length : 1})
                         </span>
                     </div>
 
@@ -290,44 +293,52 @@ export function StoreBranchDropdown({
 
             {/* Modal 1: Switch Store Dialog (Shows stores, roles, and branch info) */}
             <Dialog open={switchStoreOpen} onOpenChange={setSwitchStoreOpen}>
-                <DialogContent className="sm:max-w-[480px]">
+                <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <div className="flex items-center gap-2">
                             <div className="p-2 rounded-xl bg-primary/10 text-primary">
                                 <ArrowLeftRight className="h-5 w-5" />
                             </div>
                             <div>
-                                <DialogTitle className="text-base font-semibold">เลือกและสลับร้านค้า</DialogTitle>
+                                <DialogTitle className="text-base font-semibold">ร้านค้าและสาขาที่คุณทำงาน</DialogTitle>
                                 <DialogDescription className="text-xs text-muted-foreground">
-                                    คุณมีร้านค้าและสาขาที่สามารถเข้าทำงานได้ทั้งหมด {stores.length} ร้าน
+                                    คลิกเลือกร้านค้าเพื่อสลับเข้าไปดูข้อมูลและจัดการสาขาที่ทำ
                                 </DialogDescription>
                             </div>
                         </div>
                     </DialogHeader>
 
-                    <div className="space-y-2.5 py-3 max-h-[320px] overflow-y-auto pr-1">
+                    <div className="space-y-2.5 py-3 max-h-[340px] overflow-y-auto pr-1">
                         {stores.map((s) => {
                             const isCurrent = s.id === activeStoreId || s.store_name === storeName;
                             const isSwitching = switchingStoreId === s.id;
+                            const isExpanded = expandedStoreId === s.id || isCurrent;
                             const storeRole = s.user_role || (s.owner_id === s.id ? "owner" : "owner");
                             const badge = roleLabels[storeRole] || roleLabels.owner;
                             const storeBranches = s.branches || [];
 
                             return (
-                                <button
+                                <div
                                     key={s.id}
-                                    type="button"
-                                    onClick={() => handleSelectStore(s)}
-                                    disabled={isCurrent || !!switchingStoreId}
-                                    className={`w-full flex flex-col p-3 rounded-xl border text-left transition-all space-y-2 ${
+                                    className={`rounded-xl border transition-all overflow-hidden ${
                                         isCurrent
-                                            ? "border-primary/40 bg-primary/5 text-foreground shadow-2xs"
-                                            : "border-border/80 hover:border-primary/40 hover:bg-muted/40 text-foreground cursor-pointer"
+                                            ? "border-primary/40 bg-primary/[0.03] shadow-2xs"
+                                            : "border-border/80 bg-card hover:border-primary/30"
                                     }`}
                                 >
-                                    <div className="flex items-center justify-between w-full">
+                                    {/* Store Main Bar */}
+                                    <div 
+                                        onClick={() => {
+                                            if (!isCurrent) {
+                                                handleSelectStore(s);
+                                            } else {
+                                                setExpandedStoreId(expandedStoreId === s.id ? null : s.id);
+                                            }
+                                        }}
+                                        className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/30 transition-colors"
+                                    >
                                         <div className="flex items-center gap-3 min-w-0">
-                                            <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0 overflow-hidden">
+                                            <div className="h-10 w-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0 overflow-hidden">
                                                 {s.avatar_url ? (
                                                     <img src={s.avatar_url} alt="" className="w-full h-full object-cover" />
                                                 ) : (
@@ -336,44 +347,57 @@ export function StoreBranchDropdown({
                                             </div>
                                             <div className="flex flex-col min-w-0">
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className="text-xs font-bold truncate">{s.store_name}</span>
-                                                    <span className={`text-[8px] font-semibold px-1.5 py-0.2 rounded border ${badge.color}`}>
+                                                    <span className="text-xs font-bold text-foreground truncate">{s.store_name}</span>
+                                                    <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded border ${badge.color}`}>
                                                         {badge.label}
                                                     </span>
                                                 </div>
                                                 <span className="text-[10px] text-muted-foreground truncate">
-                                                    {s.tax_id ? `Tax ID: ${s.tax_id}` : s.store_address || "ร้านค้าของคุณ"}
+                                                    {s.tax_id ? `Tax ID: ${s.tax_id}` : s.store_address || "ร้านค้าที่คุณทำงาน"}
                                                 </span>
                                             </div>
                                         </div>
 
-                                        {isSwitching ? (
-                                            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
-                                        ) : isCurrent ? (
-                                            <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 shrink-0">
-                                                ใช้งานอยู่
-                                            </span>
-                                        ) : (
-                                            <span className="text-[10px] text-muted-foreground hover:text-foreground font-semibold shrink-0">
-                                                สลับร้าน →
-                                            </span>
-                                        )}
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            {isSwitching ? (
+                                                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                            ) : isCurrent ? (
+                                                <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 flex items-center gap-1">
+                                                    <Check className="h-3 w-3" /> ใช้งานอยู่
+                                                </span>
+                                            ) : (
+                                                <Button size="sm" variant="outline" className="h-7 text-[11px] font-semibold px-2.5 text-primary border-primary/30 hover:bg-primary/10">
+                                                    สลับเข้าร้านนี้
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
 
-                                    {/* Branches Preview for this store */}
+                                    {/* Branches in this store */}
                                     {storeBranches.length > 0 && (
-                                        <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-border/50">
-                                            <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
-                                                <Building2 className="h-2.5 w-2.5 text-primary" /> สาขา:
+                                        <div className="px-3 py-2 bg-muted/20 border-t border-border/40 space-y-1">
+                                            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">
+                                                สาขาที่คุณทำในร้านนี้ ({storeBranches.length} สาขา):
                                             </span>
-                                            {storeBranches.map((b: any) => (
-                                                <span key={b.id} className="text-[9px] bg-muted/60 text-foreground px-1.5 py-0.2 rounded border border-border/60">
-                                                    {b.name}
-                                                </span>
-                                            ))}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                                {storeBranches.map((b: any) => (
+                                                    <div 
+                                                        key={b.id} 
+                                                        className="flex items-center gap-1.5 p-1.5 rounded-md bg-background border border-border/60 text-xs"
+                                                    >
+                                                        <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                                                        <div className="flex flex-col min-w-0">
+                                                            <span className="font-semibold truncate text-[11px]">{b.name}</span>
+                                                            <span className="text-[9px] text-muted-foreground truncate">
+                                                                {b.code ? `รหัส: ${b.code}` : b.address || "สาขา / คลัง"}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
-                                </button>
+                                </div>
                             );
                         })}
                     </div>
@@ -393,18 +417,20 @@ export function StoreBranchDropdown({
                             ใส่รหัสเข้าร่วมร้าน
                         </Button>
 
-                        <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => {
-                                setSwitchStoreOpen(false);
-                                setCreateStoreOpen(true);
-                            }}
-                            className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
-                        >
-                            <Plus className="h-3.5 w-3.5" />
-                            สร้างร้านใหม่
-                        </Button>
+                        {userRole === "owner" && (
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => {
+                                    setSwitchStoreOpen(false);
+                                    setCreateStoreOpen(true);
+                                }}
+                                className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
+                            >
+                                <Plus className="h-3.5 w-3.5" />
+                                สร้างร้านใหม่
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
