@@ -16,7 +16,8 @@ export async function getBills(storeId?: string) {
 
     let query = supabase.from("bills").select(`
         *,
-        customers ( name )
+        customers ( name ),
+        items:bill_items ( * )
     `).order("created_at", { ascending: false });
 
     if (targetStoreId) {
@@ -28,7 +29,7 @@ export async function getBills(storeId?: string) {
     if (error || !bills) {
         const fallback = await supabase
             .from("bills")
-            .select(`*, customers ( name )`)
+            .select(`*, customers ( name ), items:bill_items ( * )`)
             .order("created_at", { ascending: false });
         bills = fallback.data || [];
     }
@@ -36,6 +37,7 @@ export async function getBills(storeId?: string) {
     return (bills || []).map((bill: any) => ({
         ...bill,
         customer_name: bill.customers?.name || "Unknown",
+        items: bill.items || [],
     }));
 }
 
@@ -43,10 +45,13 @@ export async function getBill(id: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    // Fetch bill
+    // Fetch bill with bill items
     const { data: bill, error: billError } = await supabase
         .from("bills")
-        .select("*")
+        .select(`
+            *,
+            items:bill_items ( * )
+        `)
         .eq("id", id)
         .single();
 
@@ -66,16 +71,10 @@ export async function getBill(id: string) {
         if (customer) customer_name = customer.name;
     }
 
-    // Fetch bill items
-    const { data: items } = await supabase
-        .from("bill_items")
-        .select("*")
-        .eq("bill_id", id);
-
     return {
         ...bill,
         customer_name,
-        items: items || [],
+        items: bill.items || [],
     };
 }
 
@@ -165,7 +164,7 @@ export async function createBill(data: {
         return { error: "Failed to create bill" };
     }
 
-    // 2. Create bill items
+    // 2. Create bill items with exact product names
     const billItems = data.items.map(item => ({
         bill_id: bill.id,
         product_id: item.product_id,
