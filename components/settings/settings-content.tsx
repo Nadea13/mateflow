@@ -2,7 +2,6 @@
 
 import { useTranslation } from "@/lib/i18n/provider";
 import { AuthProfileCard } from "@/components/settings/auth-profile-card";
-import { StoreForm } from "@/components/profile/profile-form";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DeleteAccountSection } from "@/components/settings/delete-account";
 import { LogoutButton } from "@/components/settings/logout-button";
@@ -11,8 +10,9 @@ import { CurrencySwitcher } from "@/components/currency-switcher";
 import { StripeSettingsCard } from "@/components/settings/stripe-settings-card";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { History, ChevronRight } from "lucide-react";
+import { History, ChevronRight, Store, ArrowRight } from "lucide-react";
 import { TeamManagement } from "@/components/settings/team-management";
+import { Button } from "@/components/ui/button";
 
 interface SettingsContentProps {
     authProfile: {
@@ -40,7 +40,26 @@ export function SettingsContent({ authProfile, storeProfile, teamMembers }: Sett
 
             <LogoutButton />
 
-            <StoreForm store={storeProfile} />
+            {/* Quick Link to Store & Branches Management */}
+            <Card className="max-w-2xl border border-primary/20 bg-primary/[0.03] overflow-hidden">
+                <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                        <Store className="h-4 w-4 text-primary" />
+                        ข้อมูลร้านค้าและสาขา (Store & Branches)
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                        จัดการข้อมูลร้านค้า โลโก้ ที่อยู่ เลขผู้เสียภาษี และเพิ่มสาขา / คลังสินค้าได้ที่เมนูร้านค้า
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                    <Link href="/dashboard/store">
+                        <Button variant="outline" size="sm" className="h-8 text-xs font-semibold gap-1.5 border-primary/30 hover:bg-primary/10 text-primary">
+                            ไปยังหน้าจัดการร้านค้าและสาขา
+                            <ArrowRight className="h-3.5 w-3.5" />
+                        </Button>
+                    </Link>
+                </CardContent>
+            </Card>
 
             {/* Stripe Payment Gateway Settings */}
             <StripeSettingsCard />
@@ -106,11 +125,13 @@ export function SettingsContent({ authProfile, storeProfile, teamMembers }: Sett
                 </CardContent>
             </Card>
 
-            {/* Appearance Section */}
+            {/* Theme Section */}
             <Card className="max-w-2xl">
                 <CardHeader>
-                    <CardTitle>{t("settings.appearance")}</CardTitle>
-                    <CardDescription>{t("settings.appearanceDesc")}</CardDescription>
+                    <CardTitle className="flex items-center gap-2">
+                        {t("settings.theme")}
+                    </CardTitle>
+                    <CardDescription>{t("settings.themeDesc")}</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <ThemeToggle />

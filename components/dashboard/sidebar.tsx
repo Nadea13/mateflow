@@ -13,6 +13,7 @@ import {
     Receipt,
     Globe,
     CreditCard,
+    Store,
 } from "lucide-react"
 import { useTranslation } from "@/lib/i18n/provider"
 import { MateFlowLogo } from "@/components/brand/mateflow-logo"
@@ -22,6 +23,11 @@ const sidebarItems = [
         titleKey: "nav.dashboard",
         href: "/dashboard",
         icon: LayoutDashboard,
+    },
+    {
+        titleKey: "nav.store",
+        href: "/dashboard/store",
+        icon: Store,
     },
     {
         titleKey: "nav.registry",
@@ -81,7 +87,8 @@ export function Sidebar({ userRole = "owner" }: { userRole?: "owner" | "admin" |
                                     item.href === "/dashboard/settings" ||
                                     item.href === "/dashboard/expenses" ||
                                     item.href === "/dashboard/integrations" ||
-                                    item.href === "/dashboard/billing"
+                                    item.href === "/dashboard/billing" ||
+                                    item.href === "/dashboard/store"
                                 ) {
                                     return null
                                 }
