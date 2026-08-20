@@ -66,29 +66,41 @@ function getRangeParams(range: string) {
 }
 
 // Helper to fetch and process chart data
-async function getChartData(supabase: any, range: string, type: "sales" | "profit", storeId: string) {
+async function getChartData(supabase: any, range: string, type: "sales" | "profit", storeId: string, validStoreIds: string[]) {
     const { startDate, dataPoints, dateFormat } = getRangeParams(range);
 
-    if (!storeId) return [];
-
-    // Fetch bills scoped to storeId
-    const { data: bills } = await supabase
+    // Fetch bills
+    let billQuery = supabase
         .from("bills")
         .select("created_at, total_amount")
-        .eq("store_id", storeId)
         .neq("status", "cancelled")
         .gte("created_at", startDate.toISOString())
         .order("created_at", { ascending: true });
 
-    // Fetch expenses if profit scoped to storeId
+    if (storeId) {
+        billQuery = billQuery.eq("store_id", storeId);
+    } else if (validStoreIds.length > 0) {
+        billQuery = billQuery.in("store_id", validStoreIds);
+    }
+
+    const { data: bills } = await billQuery;
+
+    // Fetch expenses
     let expenses: any[] = [];
     if (type === "profit") {
-        const { data: exp } = await supabase
+        let expQuery = supabase
             .from("expenses")
             .select("date, amount")
-            .eq("store_id", storeId)
             .gte("date", startDate.toISOString().split("T")[0])
             .order("date", { ascending: true });
+
+        if (storeId) {
+            expQuery = expQuery.eq("store_id", storeId);
+        } else if (validStoreIds.length > 0) {
+            expQuery = expQuery.in("store_id", validStoreIds);
+        }
+
+        const { data: exp } = await expQuery;
         expenses = exp || [];
     }
 
@@ -111,12 +123,7 @@ async function getChartData(supabase: any, range: string, type: "sales" | "profi
             }).reduce((sum: number, b: any) => sum + Number(b.total_amount), 0) || 0;
 
             const name = `${i.toString().padStart(2, "0")}:00`;
-
-            if (type === "sales") {
-                chartData.push({ name, total: hourSales });
-            } else {
-                chartData.push({ name, total: hourSales });
-            }
+            chartData.push({ name, total: hourSales });
         }
     } else if (dateFormat === "day") {
         for (let i = dataPoints - 1; i >= 0; i--) {
@@ -124,7 +131,7 @@ async function getChartData(supabase: any, range: string, type: "sales" | "profi
             d.setDate(d.getDate() - i);
             const dateStr = d.toISOString().split("T")[0];
 
-            const daySales = bills?.filter((b: any) => b.created_at.startsWith(dateStr))
+            const daySales = bills?.filter((b: any) => b.created_at?.startsWith(dateStr))
                 .reduce((sum: number, b: any) => sum + Number(b.total_amount), 0) || 0;
 
             const name = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -132,7 +139,7 @@ async function getChartData(supabase: any, range: string, type: "sales" | "profi
             if (type === "sales") {
                 chartData.push({ name, total: daySales });
             } else {
-                const dayExpenses = expenses?.filter((e: any) => e.date.startsWith(dateStr))
+                const dayExpenses = expenses?.filter((e: any) => e.date?.startsWith(dateStr))
                     .reduce((sum: number, e: any) => sum + Number(e.amount), 0) || 0;
                 chartData.push({ name, total: daySales - dayExpenses });
             }
@@ -143,7 +150,7 @@ async function getChartData(supabase: any, range: string, type: "sales" | "profi
             d.setMonth(d.getMonth() - i);
             const monthYearStr = d.toISOString().slice(0, 7);
 
-            const monthSales = bills?.filter((b: any) => b.created_at.startsWith(monthYearStr))
+            const monthSales = bills?.filter((b: any) => b.created_at?.startsWith(monthYearStr))
                 .reduce((sum: number, b: any) => sum + Number(b.total_amount), 0) || 0;
 
             const name = d.toLocaleDateString("en-US", { month: "short" });
@@ -151,27 +158,9 @@ async function getChartData(supabase: any, range: string, type: "sales" | "profi
             if (type === "sales") {
                 chartData.push({ name, total: monthSales });
             } else {
-                const monthExpenses = expenses?.filter((e: any) => e.date.startsWith(monthYearStr))
+                const monthExpenses = expenses?.filter((e: any) => e.date?.startsWith(monthYearStr))
                     .reduce((sum: number, e: any) => sum + Number(e.amount), 0) || 0;
                 chartData.push({ name, total: monthSales - monthExpenses });
-            }
-        }
-    } else if (dateFormat === "year") {
-        const years = range === "3y" ? 3 : 5;
-        for (let i = years - 1; i >= 0; i--) {
-            const d = new Date();
-            d.setFullYear(d.getFullYear() - ((years - 1) - i));
-            const yearStr = d.getFullYear().toString();
-
-            const yearSales = bills?.filter((b: any) => b.created_at.startsWith(yearStr))
-                .reduce((sum: number, b: any) => sum + Number(b.total_amount), 0) || 0;
-
-            if (type === "sales") {
-                chartData.push({ name: yearStr, total: yearSales });
-            } else {
-                const yearExpenses = expenses?.filter((e: any) => e.date.startsWith(yearStr))
-                    .reduce((sum: number, e: any) => sum + Number(e.amount), 0) || 0;
-                chartData.push({ name: yearStr, total: yearSales - yearExpenses });
             }
         }
     }
@@ -183,36 +172,29 @@ export async function getDashboardStats(salesRange: string = "7d", profitRange: 
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-        return {
-            todaySales: 0,
-            pendingBills: 0,
-            lowStockItems: 0,
-            chartData: [],
-            profitChartData: [],
-            totalRevenue: 0,
-            totalOrders: 0,
-            todayProfit: 0,
-            activeNow: 1,
-        };
-    }
+    const emptyStats = {
+        todaySales: 0,
+        pendingBills: 0,
+        pendingBillsAmount: 0,
+        expiringQuotationsCount: 0,
+        lowStockItems: 0,
+        lowStockProducts: [] as any[],
+        chartData: [] as any[],
+        profitChartData: [] as any[],
+        totalRevenue: 0,
+        totalOrders: 0,
+        todayProfit: 0,
+        monthInflow: 0,
+        monthOutflow: 0,
+        topProducts: [] as any[],
+        urgentActions: [] as any[],
+        activeNow: 1,
+    };
+
+    if (!user) return emptyStats;
 
     const validStores = await getStores();
     const validStoreIds = validStores.map(s => s.id);
-
-    if (validStoreIds.length === 0) {
-        return {
-            todaySales: 0,
-            pendingBills: 0,
-            lowStockItems: 0,
-            chartData: [],
-            profitChartData: [],
-            totalRevenue: 0,
-            totalOrders: 0,
-            todayProfit: 0,
-            activeNow: 1,
-        };
-    }
 
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
     let targetStoreId = activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0];
@@ -220,74 +202,189 @@ export async function getDashboardStats(salesRange: string = "7d", profitRange: 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayISO = today.toISOString();
+    const currentMonthPrefix = today.toISOString().slice(0, 7);
 
-    // 0. Store-Scoped Total Revenue & Total Orders
-    const { data: allBills } = await supabase
+    // 1. Fetch All Active Bills
+    let billsQuery = supabase
         .from("bills")
-        .select("total_amount")
-        .eq("store_id", targetStoreId)
-        .neq("status", "cancelled");
-
-    let totalRevenue = 0;
-    let totalOrders = 0;
-
-    if (allBills) {
-        totalRevenue = allBills.reduce((sum, bill) => sum + Number(bill.total_amount), 0);
-        totalOrders = allBills.length;
-    }
-
-    // 1. Store-Scoped Today's Sales
-    const { data: todayBills } = await supabase
-        .from("bills")
-        .select("total_amount")
-        .eq("store_id", targetStoreId)
+        .select(`
+            id,
+            store_id,
+            customer_id,
+            total_amount,
+            status,
+            adjustments,
+            payment_terms,
+            validity_days,
+            created_at,
+            customer:customers(name),
+            items:bill_items(product_id, product_name, quantity, total_price)
+        `)
         .neq("status", "cancelled")
-        .gte("created_at", todayISO);
+        .order("created_at", { ascending: false });
 
-    let todaySales = 0;
-    if (todayBills) {
-        todaySales = todayBills.reduce((sum, bill) => sum + Number(bill.total_amount), 0);
+    if (targetStoreId) {
+        billsQuery = billsQuery.eq("store_id", targetStoreId);
+    } else if (validStoreIds.length > 0) {
+        billsQuery = billsQuery.in("store_id", validStoreIds);
     }
 
-    // 2. Store-Scoped Pending & Low Stock
-    const { count: pendingBills } = await supabase
-        .from("bills")
-        .select("*", { count: "exact", head: true })
-        .eq("store_id", targetStoreId)
-        .eq("status", "draft");
+    const { data: rawBills } = await billsQuery;
+    const bills = rawBills || [];
 
-    const { count: lowStockItems } = await supabase
-        .from("products")
-        .select("*", { count: "exact", head: true })
-        .eq("store_id", targetStoreId)
-        .lt("stock", 10);
-
-    // 4. Sales & Profit Chart Data
-    const chartData = await getChartData(supabase, salesRange, "sales", targetStoreId);
-    const profitChartData = await getChartData(supabase, profitRange, "profit", targetStoreId);
-
-    // 6. Today's Profit
-    const { data: todayExpenses } = await supabase
+    // 2. Fetch All Expenses
+    let expQuery = supabase
         .from("expenses")
-        .select("amount")
-        .eq("store_id", targetStoreId)
-        .gte("date", todayISO.split("T")[0]);
+        .select("*")
+        .order("date", { ascending: false });
 
-    let todayExpensesTotal = 0;
-    if (todayExpenses) {
-        todayExpensesTotal = todayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+    if (targetStoreId) {
+        expQuery = expQuery.eq("store_id", targetStoreId);
+    } else if (validStoreIds.length > 0) {
+        expQuery = expQuery.in("store_id", validStoreIds);
     }
+
+    const { data: rawExpenses } = await expQuery;
+    const expenses = rawExpenses || [];
+
+    // 3. Fetch Products for Stock Analytics
+    let prodQuery = supabase
+        .from("products")
+        .select("id, name, sku, price, cost_price, stock, min_stock_level, supplier_id")
+        .order("stock", { ascending: true });
+
+    if (targetStoreId) {
+        prodQuery = prodQuery.eq("store_id", targetStoreId);
+    } else if (validStoreIds.length > 0) {
+        prodQuery = prodQuery.in("store_id", validStoreIds);
+    }
+
+    const { data: rawProducts } = await prodQuery;
+    const products = rawProducts || [];
+
+    // --- Calculations ---
+
+    // Total Revenue & Total Orders
+    const totalRevenue = bills.reduce((sum, b) => sum + Number(b.total_amount || 0), 0);
+    const totalOrders = bills.length;
+
+    // Today's Sales & Expenses
+    const todayBills = bills.filter(b => b.created_at >= todayISO);
+    const todaySales = todayBills.reduce((sum, b) => sum + Number(b.total_amount || 0), 0);
+
+    const todayExpenses = expenses.filter(e => e.date >= todayISO.split("T")[0]);
+    const todayExpensesTotal = todayExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
     const todayProfit = todaySales - todayExpensesTotal;
+
+    // Monthly Cashflow: Inflow (Paid bills this month) vs Outflow (Expenses this month)
+    const monthPaidBills = bills.filter(b => b.status === "paid" && b.created_at?.startsWith(currentMonthPrefix));
+    const monthInflow = monthPaidBills.reduce((sum, b) => sum + Number(b.total_amount || 0), 0);
+
+    const monthExpenses = expenses.filter(e => e.date?.startsWith(currentMonthPrefix));
+    const monthOutflow = monthExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    // Pending & Overdue Invoices (Status: draft, and not quotation tag)
+    const pendingDrafts = bills.filter(b => {
+        const isQuotation = b.status === "quotation" || b.adjustments?.some((a: any) => a.label === "__is_quotation__");
+        return (b.status === "draft" && !isQuotation);
+    });
+
+    const pendingBillsCount = pendingDrafts.length;
+    const pendingBillsAmount = pendingDrafts.reduce((sum, b) => sum + Number(b.total_amount || 0), 0);
+
+    // Expiring Quotations (Status: quotation)
+    const activeQuotations = bills.filter(b => {
+        return b.status === "quotation" || (b.status === "draft" && b.adjustments?.some((a: any) => a.label === "__is_quotation__"));
+    });
+    const expiringQuotationsCount = activeQuotations.length;
+
+    // Low Stock Products
+    const lowStockProductsList = products.filter(p => Number(p.stock) <= (Number(p.min_stock_level) || 10));
+    const lowStockItemsCount = lowStockProductsList.length;
+
+    // Top 5 Best Selling Products (Aggregated from bill items)
+    const productSalesMap: Record<string, { id: string; name: string; quantity: number; revenue: number }> = {};
+    bills.forEach(bill => {
+        if (bill.items && Array.isArray(bill.items)) {
+            bill.items.forEach((item: any) => {
+                const pId = item.product_id || item.product_name;
+                if (!productSalesMap[pId]) {
+                    productSalesMap[pId] = {
+                        id: item.product_id,
+                        name: item.product_name,
+                        quantity: 0,
+                        revenue: 0,
+                    };
+                }
+                productSalesMap[pId].quantity += Number(item.quantity || 0);
+                productSalesMap[pId].revenue += Number(item.total_price || (item.quantity * item.unit_price) || 0);
+            });
+        }
+    });
+
+    const topProducts = Object.values(productSalesMap)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
+
+    // Build Urgent Operational Action Items
+    const urgentActions: any[] = [];
+
+    if (lowStockItemsCount > 0) {
+        urgentActions.push({
+            id: "low-stock-alert",
+            type: "stock",
+            level: "warning",
+            title: `สินค้าใกล้หมดสต็อก ${lowStockItemsCount} รายการ`,
+            description: `มีสินค้าต่ำกว่าเกณฑ์แจ้งเตือน เช่น ${lowStockProductsList.slice(0, 2).map(p => p.name).join(", ")}`,
+            actionLabel: "จัดการสต็อกสินค้า",
+            actionHref: "/dashboard/catalog",
+        });
+    }
+
+    if (pendingBillsCount > 0) {
+        urgentActions.push({
+            id: "pending-bills-alert",
+            type: "billing",
+            level: "info",
+            title: `ใบแจ้งหนี้รอเก็บเงิน ${pendingBillsCount} ใบ (฿${pendingBillsAmount.toLocaleString()})`,
+            description: "มีใบแจ้งหนี้ที่ออกแล้วรอการชำระเงิน ตรวจสอบหรือส่ง QR Code ให้ลูกค้า",
+            actionLabel: "ดูใบแจ้งหนี้",
+            actionHref: "/dashboard/bills",
+        });
+    }
+
+    if (expiringQuotationsCount > 0) {
+        urgentActions.push({
+            id: "quotations-alert",
+            type: "quotation",
+            level: "neutral",
+            title: `ใบเสนอราคาเปิดอยู่ ${expiringQuotationsCount} ใบ`,
+            description: "ติดตามผลกับลูกค้าก่อนหมดอายุการเสนอราคา",
+            actionLabel: "ดูใบเสนอราคา",
+            actionHref: "/dashboard/bills",
+        });
+    }
+
+    // Chart Data
+    const chartData = await getChartData(supabase, salesRange, "sales", targetStoreId, validStoreIds);
+    const profitChartData = await getChartData(supabase, profitRange, "profit", targetStoreId, validStoreIds);
 
     return {
         todaySales,
-        pendingBills: pendingBills || 0,
-        lowStockItems: lowStockItems || 0,
+        pendingBills: pendingBillsCount,
+        pendingBillsAmount,
+        expiringQuotationsCount,
+        lowStockItems: lowStockItemsCount,
+        lowStockProducts: lowStockProductsList.slice(0, 5),
         chartData,
         profitChartData,
         totalRevenue,
         totalOrders,
         todayProfit,
+        monthInflow,
+        monthOutflow,
+        topProducts,
+        urgentActions,
         activeNow: 1,
     };
 }
@@ -304,20 +401,20 @@ export async function getInventorySummary() {
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
     let targetStoreId = activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0];
 
-    if (!targetStoreId) return [];
-
-    const { data: products, error } = await supabase
+    let prodQuery = supabase
         .from("products")
         .select("name, stock")
-        .eq("store_id", targetStoreId)
         .order("stock", { ascending: true })
         .limit(20);
 
-    if (error) {
-        return [];
+    if (targetStoreId) {
+        prodQuery = prodQuery.eq("store_id", targetStoreId);
+    } else if (validStoreIds.length > 0) {
+        prodQuery = prodQuery.in("store_id", validStoreIds);
     }
 
-    return products;
+    const { data: products } = await prodQuery;
+    return products || [];
 }
 
 export async function getRecentActivity() {
@@ -332,50 +429,65 @@ export async function getRecentActivity() {
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
     let targetStoreId = activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0];
 
-    if (!targetStoreId) return [];
+    // Fetch latest strictly from active store or valid stores
+    let billsQuery = supabase
+        .from("bills")
+        .select(`id, total_amount, status, created_at, customer:customers(name)`)
+        .neq("status", "cancelled")
+        .order("created_at", { ascending: false })
+        .limit(6);
 
-    // Fetch latest strictly from active store
+    let prodsQuery = supabase
+        .from("products")
+        .select("id, name, stock, created_at")
+        .order("created_at", { ascending: false })
+        .limit(6);
+
+    let custsQuery = supabase
+        .from("customers")
+        .select("id, name, created_at")
+        .order("created_at", { ascending: false })
+        .limit(6);
+
+    let expsQuery = supabase
+        .from("expenses")
+        .select("id, title, amount, date")
+        .order("date", { ascending: false })
+        .limit(6);
+
+    if (targetStoreId) {
+        billsQuery = billsQuery.eq("store_id", targetStoreId);
+        prodsQuery = prodsQuery.eq("store_id", targetStoreId);
+        custsQuery = custsQuery.eq("store_id", targetStoreId);
+        expsQuery = expsQuery.eq("store_id", targetStoreId);
+    } else if (validStoreIds.length > 0) {
+        billsQuery = billsQuery.in("store_id", validStoreIds);
+        prodsQuery = prodsQuery.in("store_id", validStoreIds);
+        custsQuery = custsQuery.in("store_id", validStoreIds);
+        expsQuery = expsQuery.in("store_id", validStoreIds);
+    }
+
     const [
         { data: bills },
         { data: products },
         { data: customers },
         { data: expenses }
     ] = await Promise.all([
-        supabase
-            .from("bills")
-            .select(`id, total_amount, created_at, customers(name)`)
-            .eq("store_id", targetStoreId)
-            .neq("status", "cancelled")
-            .order("created_at", { ascending: false })
-            .limit(5),
-        supabase
-            .from("products")
-            .select("id, name, stock, created_at")
-            .eq("store_id", targetStoreId)
-            .order("created_at", { ascending: false })
-            .limit(5),
-        supabase
-            .from("customers")
-            .select("id, name, created_at")
-            .eq("store_id", targetStoreId)
-            .order("created_at", { ascending: false })
-            .limit(5),
-        supabase
-            .from("expenses")
-            .select("id, title, amount, date")
-            .eq("store_id", targetStoreId)
-            .order("date", { ascending: false })
-            .limit(5)
+        billsQuery,
+        prodsQuery,
+        custsQuery,
+        expsQuery
     ]);
 
     const activities: any[] = [];
 
     bills?.forEach((b: any) => {
+        const isPaid = b.status === "paid";
         activities.push({
             id: `bill-${b.id}`,
             type: "bill",
-            title: b.customers?.name || "Customer",
-            description: `Created a bill of $${b.total_amount}`,
+            title: isPaid ? `รับชำระเงินจาก ${b.customer?.name || "ลูกค้า"}` : `ออกเอกสารให้ ${b.customer?.name || "ลูกค้า"}`,
+            description: `ยอดรวม ฿${Number(b.total_amount || 0).toLocaleString()} • สถานะ: ${b.status}`,
             timestamp: b.created_at,
         });
     });
@@ -384,8 +496,8 @@ export async function getRecentActivity() {
         activities.push({
             id: `prod-${p.id}`,
             type: "product",
-            title: p.name,
-            description: `New product added (Stock: ${p.stock})`,
+            title: `เพิ่มสินค้าใหม่: ${p.name}`,
+            description: `สต็อกเริ่มต้น ${p.stock} ชิ้น`,
             timestamp: p.created_at,
         });
     });
@@ -394,8 +506,8 @@ export async function getRecentActivity() {
         activities.push({
             id: `cust-${c.id}`,
             type: "customer",
-            title: c.name,
-            description: "New customer registered",
+            title: `ลงทะเบียนลูกค้าใหม่: ${c.name}`,
+            description: "บันทึกลงสมุดรายชื่อลูกค้าแล้ว",
             timestamp: c.created_at,
         });
     });
@@ -405,12 +517,11 @@ export async function getRecentActivity() {
             id: `exp-${e.id}`,
             type: "expense",
             title: e.title,
-            description: `Recorded expense of $${e.amount}`,
+            description: `บันทึกค่าใช้จ่าย ฿${Number(e.amount || 0).toLocaleString()}`,
             timestamp: e.date,
         });
     });
 
     activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
     return activities.slice(0, 10);
 }
