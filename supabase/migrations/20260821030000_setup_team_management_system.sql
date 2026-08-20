@@ -1,4 +1,4 @@
-﻿-- Migration: Complete Team Management System Setup
+﻿-- Migration: Complete Team Management System Setup (Idempotent Safe)
 -- Tables: store_codes, store_team_members, generate_store_code, join_store_by_code
 
 DO $$
@@ -8,8 +8,8 @@ BEGIN
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         store_id uuid REFERENCES public.stores(id) ON DELETE CASCADE NOT NULL,
         code text UNIQUE NOT NULL,
-        role text NOT NULL DEFAULT 'sales', -- 'sales', 'stock_keeper', 'accountant', 'admin'
-        branch_id uuid REFERENCES public.branchs(id) ON DELETE SET NULL, -- NULL means all branches
+        role text NOT NULL DEFAULT 'sales',
+        branch_id uuid REFERENCES public.branchs(id) ON DELETE SET NULL,
         created_by uuid REFERENCES auth.users(id) ON DELETE CASCADE,
         created_at timestamptz DEFAULT now()
     );
@@ -30,6 +30,7 @@ BEGIN
     ALTER TABLE public.store_codes ENABLE ROW LEVEL SECURITY;
     ALTER TABLE public.store_team_members ENABLE ROW LEVEL SECURITY;
 
+    -- Drop existing policies first to prevent "already exists" error
     DROP POLICY IF EXISTS "Allow authenticated to manage store_codes" ON public.store_codes;
     CREATE POLICY "Allow authenticated to manage store_codes" ON public.store_codes FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
@@ -70,7 +71,7 @@ BEGIN
         RAISE EXCEPTION 'Store not found for current user';
     END IF;
 
-    -- Generate a clean 6-character random alphanumeric code e.g. MATE-8921
+    -- Generate random 6-character uppercase code e.g. MF-A8B9C2
     v_code := 'MF-' || UPPER(SUBSTRING(MD5(RANDOM()::text) FROM 1 FOR 6));
 
     INSERT INTO public.store_codes (store_id, code, role, branch_id, created_by)
@@ -97,14 +98,12 @@ BEGIN
         RAISE EXCEPTION 'Not authenticated';
     END IF;
 
-    -- Find matching code
     SELECT * INTO v_code_record FROM public.store_codes WHERE UPPER(code) = UPPER(TRIM(p_code)) LIMIT 1;
 
     IF v_code_record IS NULL THEN
         RAISE EXCEPTION 'Invalid or expired store join code';
     END IF;
 
-    -- Check if already a member
     SELECT * INTO v_existing FROM public.store_team_members WHERE store_id = v_code_record.store_id AND user_id = v_user_id;
 
     IF v_existing IS NOT NULL THEN
