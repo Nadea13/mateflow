@@ -56,19 +56,23 @@ export async function getUserProfile() {
         // Fallback check if user is invited employee to any store
         const { data: membership } = await supabase
             .from("store_team_members")
-            .select(`
-                role,
-                assigned_branch_id,
-                store:stores ( * )
-            `)
+            .select("role, assigned_branch_id, store_id")
             .eq("user_id", user.id)
             .order("created_at", { ascending: true })
             .maybeSingle();
 
-        if (membership && membership.store) {
-            store = membership.store as any;
-            userRole = membership.role || "sales";
-            assignedBranchId = membership.assigned_branch_id || null;
+        if (membership) {
+            const { data: s } = await supabase
+                .from("stores")
+                .select("*")
+                .eq("id", membership.store_id)
+                .maybeSingle();
+
+            if (s) {
+                store = s;
+                userRole = membership.role || "sales";
+                assignedBranchId = membership.assigned_branch_id || null;
+            }
         }
     }
 
@@ -142,11 +146,16 @@ export async function getStoreProfile(storeId?: string) {
         // Fallback by member membership
         const { data: membership } = await supabase
             .from("store_team_members")
-            .select("store:stores ( * )")
+            .select("store_id")
             .eq("user_id", user.id)
             .maybeSingle();
-        if (membership && membership.store) {
-            store = membership.store as any;
+        if (membership) {
+            const { data: s } = await supabase
+                .from("stores")
+                .select("*")
+                .eq("id", membership.store_id)
+                .maybeSingle();
+            store = s;
         }
     }
 
@@ -205,16 +214,9 @@ export async function getStores() {
         .order("created_at", { ascending: true });
 
     // 2. Stores where user is a team member
-    const { data: memberStores } = await supabase
+    const { data: memberRows } = await supabase
         .from("store_team_members")
-        .select(`
-            role,
-            assigned_branch_id,
-            store:stores (
-                *,
-                branchs:branchs ( id, name, code, type, address )
-            )
-        `)
+        .select("role, assigned_branch_id, store_id")
         .eq("user_id", user.id);
 
     const allStores: any[] = (ownedStores || []).map(s => ({
@@ -223,23 +225,51 @@ export async function getStores() {
         branches: s.branchs || [],
     }));
 
-    if (memberStores && memberStores.length > 0) {
-        for (const ms of memberStores) {
-            if (ms.store && !allStores.some(s => s.id === (ms.store as any).id)) {
-                const storeData: any = ms.store;
-                // Filter branches if assigned to specific branch
-                const rawBranches = storeData.branchs || [];
-                const accessibleBranches = ms.assigned_branch_id
-                    ? rawBranches.filter((b: any) => b.id === ms.assigned_branch_id)
-                    : rawBranches;
+    if (memberRows && memberRows.length > 0) {
+        for (const mr of memberRows) {
+            if (!allStores.some(s => s.id === mr.store_id)) {
+                // Fetch store details with branches
+                const { data: storeDetails } = await supabase
+                    .from("stores")
+                    .select(`
+                        *,
+                        branchs:branchs ( id, name, code, type, address )
+                    `)
+                    .eq("id", mr.store_id)
+                    .maybeSingle();
 
-                allStores.push({
-                    ...storeData,
-                    user_role: ms.role,
-                    assigned_branch_id: ms.assigned_branch_id,
-                    branches: accessibleBranches,
-                });
+                if (storeDetails) {
+                    const rawBranches = storeDetails.branchs || [];
+                    const accessibleBranches = mr.assigned_branch_id
+                        ? rawBranches.filter((b: any) => b.id === mr.assigned_branch_id)
+                        : rawBranches;
+
+                    allStores.push({
+                        ...storeDetails,
+                        user_role: mr.role,
+                        assigned_branch_id: mr.assigned_branch_id,
+                        branches: accessibleBranches,
+                    });
+                }
             }
+        }
+    }
+
+    // Fallback: If list is completely empty, try fetching all stores user has ID on
+    if (allStores.length === 0) {
+        const { data: fallbackStores } = await supabase
+            .from("stores")
+            .select(`
+                *,
+                branchs:branchs ( id, name, code, type, address )
+            `);
+
+        if (fallbackStores && fallbackStores.length > 0) {
+            return fallbackStores.map(s => ({
+                ...s,
+                user_role: s.owner_id === user.id ? "owner" : "sales",
+                branches: s.branchs || [],
+            }));
         }
     }
 
