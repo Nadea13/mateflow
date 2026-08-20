@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Product } from "@/types";
+import { getStores } from "@/lib/actions/profile";
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
@@ -15,22 +16,27 @@ export async function getProducts(storeId?: string) {
 
     if (!user) return [];
 
-    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
 
-    let query = supabase.from("products").select("*").order("created_at", { ascending: false });
+    if (validStoreIds.length === 0) return [];
 
-    if (targetStoreId) {
-        query = query.eq("store_id", targetStoreId);
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = storeId || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return [];
     }
 
-    let { data: products, error } = await query;
+    // Strictly fetch products belonging to this active store
+    const { data: products, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("store_id", targetStoreId)
+        .order("created_at", { ascending: false });
 
     if (error || !products) {
-        const fallback = await supabase
-            .from("products")
-            .select("*")
-            .order("created_at", { ascending: false });
-        products = fallback.data || [];
+        return [];
     }
 
     return products;
@@ -47,19 +53,18 @@ export async function createProduct(data: Partial<Product>) {
         return { error: "Unauthorized" };
     }
 
-    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
 
-    if (!targetStoreId) {
-        const { data: defaultStore } = await supabase
-            .from("stores")
-            .select("id")
-            .eq("owner_id", user.id)
-            .order("created_at", { ascending: true })
-            .maybeSingle();
+    if (validStoreIds.length === 0) {
+        return { error: "No active store found" };
+    }
 
-        if (defaultStore) {
-            targetStoreId = defaultStore.id;
-        }
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return { error: "Invalid store access" };
     }
 
     const payload: any = {
@@ -67,17 +72,10 @@ export async function createProduct(data: Partial<Product>) {
         updated_at: new Date().toISOString(),
         price: Number(data.price),
         stock: Number(data.stock),
-        store_id: targetStoreId || user.id,
+        store_id: targetStoreId,
     };
 
     let { error } = await supabase.from("products").insert(payload);
-
-    if (error && (error.code === "PGRST204" || error.message?.includes("store_id"))) {
-        delete payload.store_id;
-        payload.user_id = user.id;
-        const fallbackRes = await supabase.from("products").insert(payload);
-        error = fallbackRes.error;
-    }
 
     if (error) {
         console.error("Error creating product:", error);
@@ -87,6 +85,7 @@ export async function createProduct(data: Partial<Product>) {
     console.log("Product created successfully, revalidating path");
     revalidatePath("/dashboard/catalog", "page"); 
     revalidatePath("/dashboard/products", "page");
+    revalidatePath("/dashboard/inventory", "page");
     return { success: true, isUpdate: false, product: data as Product, message: "Product created successfully" };
 }
 
@@ -98,6 +97,18 @@ export async function updateProduct(id: string, data: Partial<Product>) {
     console.log(`Updating product ${id} with data:`, data);
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    // Verify ownership of the product
+    const { data: existing } = await supabase.from("products").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
 
     const updates = {
         ...data,
@@ -116,7 +127,9 @@ export async function updateProduct(id: string, data: Partial<Product>) {
         return { error: "Failed to update product" };
     }
 
-    revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/products", "page");
+    revalidatePath("/dashboard/catalog", "page"); 
+    revalidatePath("/dashboard/products", "page");
+    revalidatePath("/dashboard/inventory", "page");
     return { success: true, isUpdate: true, message: "Product updated successfully" };
 }
 
@@ -132,6 +145,17 @@ export async function updateProductByName(name: string, data: Partial<Product>) 
 export async function deleteProduct(id: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { data: existing } = await supabase.from("products").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
 
     const { error } = await supabase
         .from("products")
@@ -143,7 +167,9 @@ export async function deleteProduct(id: string) {
         return { error: "Failed to delete product" };
     }
 
-    revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/products", "page");
+    revalidatePath("/dashboard/catalog", "page"); 
+    revalidatePath("/dashboard/products", "page");
+    revalidatePath("/dashboard/inventory", "page");
     return { success: true };
 }
 

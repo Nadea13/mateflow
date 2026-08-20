@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Bill, BillItem } from "@/types";
+import { getStores } from "@/lib/actions/profile";
 
 export async function getBills(storeId?: string) {
     const cookieStore = await cookies();
@@ -12,26 +13,30 @@ export async function getBills(storeId?: string) {
 
     if (!user) return [];
 
-    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    if (validStoreIds.length === 0) return [];
+
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = storeId || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return [];
+    }
 
     let query = supabase.from("bills").select(`
         *,
         customers ( name ),
         items:bill_items ( * )
-    `).order("created_at", { ascending: false });
-
-    if (targetStoreId) {
-        query = query.eq("store_id", targetStoreId);
-    }
+    `)
+    .eq("store_id", targetStoreId)
+    .order("created_at", { ascending: false });
 
     let { data: bills, error } = await query;
 
     if (error || !bills) {
-        const fallback = await supabase
-            .from("bills")
-            .select(`*, customers ( name ), items:bill_items ( * )`)
-            .order("created_at", { ascending: false });
-        bills = fallback.data || [];
+        return [];
     }
 
     return (bills || []).map((bill: any) => ({
@@ -44,6 +49,12 @@ export async function getBills(storeId?: string) {
 export async function getBill(id: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return null;
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
 
     // Fetch bill with bill items
     const { data: bill, error: billError } = await supabase
@@ -55,8 +66,8 @@ export async function getBill(id: string) {
         .eq("id", id)
         .single();
 
-    if (billError || !bill) {
-        console.error("Error fetching bill:", JSON.stringify(billError));
+    if (billError || !bill || !validStoreIds.includes(bill.store_id)) {
+        console.error("Error fetching bill or access denied:", JSON.stringify(billError));
         return null;
     }
 
@@ -100,15 +111,18 @@ export async function createBill(data: {
         return { error: "Unauthorized" };
     }
 
-    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
-    if (!targetStoreId) {
-        const { data: defaultStore } = await supabase
-            .from("stores")
-            .select("id")
-            .eq("owner_id", user.id)
-            .order("created_at", { ascending: true })
-            .maybeSingle();
-        if (defaultStore) targetStoreId = defaultStore.id;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    if (validStoreIds.length === 0) {
+        return { error: "No active store found" };
+    }
+
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return { error: "Invalid store access" };
     }
 
     if (!data.items || data.items.length === 0) {
@@ -133,9 +147,9 @@ export async function createBill(data: {
     }
     total_amount = Math.max(0, Math.round(total_amount * 100) / 100);
 
-    // 1. Create bill with store_id (or fallback user_id)
+    // 1. Create bill strictly for targetStoreId
     const billPayload: any = {
-        store_id: targetStoreId || user.id,
+        store_id: targetStoreId,
         customer_id: data.customer_id,
         total_amount,
         note: data.note || null,
@@ -151,17 +165,9 @@ export async function createBill(data: {
         .select()
         .single();
 
-    if (billError && (billError.code === "PGRST204" || billError.message?.includes("store_id"))) {
-        delete billPayload.store_id;
-        billPayload.user_id = user.id;
-        const retryRes = await supabase.from("bills").insert(billPayload).select().single();
-        bill = retryRes.data;
-        billError = retryRes.error;
-    }
-
     if (billError || !bill) {
         console.error("Error creating bill:", billError);
-        return { error: "Failed to create bill" };
+        return { error: billError?.message || "Failed to create bill" };
     }
 
     // 2. Create bill items with exact product names
@@ -183,12 +189,13 @@ export async function createBill(data: {
         return { error: "Failed to create bill items" };
     }
 
-    // 3. Deduct stock for each product
+    // 3. Deduct stock for each product belonging to this store
     for (const item of data.items) {
         const { data: product } = await supabase
             .from("products")
             .select("stock")
             .eq("id", item.product_id)
+            .eq("store_id", targetStoreId)
             .single();
 
         if (product) {
@@ -196,18 +203,31 @@ export async function createBill(data: {
             await supabase
                 .from("products")
                 .update({ stock: newStock, updated_at: new Date().toISOString() })
-                .eq("id", item.product_id);
+                .eq("id", item.product_id)
+                .eq("store_id", targetStoreId);
         }
     }
 
     revalidatePath("/dashboard/bills");
     revalidatePath("/dashboard/catalog");
+    revalidatePath("/dashboard/inventory");
     return { success: true, billId: bill.id };
 }
 
 export async function updateBillStatus(id: string, status: "draft" | "paid" | "cancelled") {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { data: existing } = await supabase.from("bills").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
 
     const { error } = await supabase
         .from("bills")
@@ -226,6 +246,17 @@ export async function updateBillStatus(id: string, status: "draft" | "paid" | "c
 export async function deleteBill(id: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { data: existing } = await supabase.from("bills").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
 
     const { error } = await supabase
         .from("bills")
