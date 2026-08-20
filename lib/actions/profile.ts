@@ -141,35 +141,40 @@ export async function updateProfile(data: {
         return { error: "User session expired. Please sign in again." };
     }
 
-    const updatePayload: any = {
+    // Try primary payload with full fields
+    const fullPayload: any = {
         id: user.id,
-        email: user.email || undefined,
         updated_at: new Date().toISOString(),
     };
 
-    if (data.store_name !== undefined) updatePayload.store_name = data.store_name;
-    if (data.store_address !== undefined) updatePayload.store_address = data.store_address;
-    if (data.tax_id !== undefined) updatePayload.tax_id = data.tax_id;
-    if (data.store_phone !== undefined) updatePayload.store_phone = data.store_phone;
-    if (data.avatar_url !== undefined) updatePayload.avatar_url = data.avatar_url;
-    if (data.signature_url !== undefined) updatePayload.signature_url = data.signature_url;
+    if (data.store_name !== undefined) fullPayload.store_name = data.store_name;
+    if (data.store_address !== undefined) fullPayload.store_address = data.store_address;
+    if (data.tax_id !== undefined) fullPayload.tax_id = data.tax_id;
+    if (data.store_phone !== undefined) fullPayload.store_phone = data.store_phone;
+    if (data.avatar_url !== undefined) fullPayload.avatar_url = data.avatar_url;
+    if (data.signature_url !== undefined) fullPayload.signature_url = data.signature_url;
 
-    // Check if profile exists, if not include default fields
-    const { data: existingProfile } = await supabase
+    let { error } = await supabase
         .from("profiles")
-        .select("id")
-        .eq("id", user.id)
-        .maybeSingle();
+        .upsert(fullPayload, { onConflict: "id" });
 
-    if (!existingProfile) {
-        updatePayload.role = "owner";
-        updatePayload.default_currency = "THB";
-        updatePayload.country = "TH";
+    // Fallback: If local/remote Postgres schema doesn't have tax_id / signature_url / store_phone columns yet
+    if (error && (error.code === "PGRST204" || error.message?.includes("column"))) {
+        console.warn("Retrying profile upsert with core schema fields due to missing columns:", error.message);
+        
+        const corePayload: any = {
+            id: user.id,
+            updated_at: new Date().toISOString(),
+        };
+        if (data.store_name !== undefined) corePayload.store_name = data.store_name;
+        if (data.avatar_url !== undefined) corePayload.avatar_url = data.avatar_url;
+        
+        const retryResult = await supabase
+            .from("profiles")
+            .upsert(corePayload, { onConflict: "id" });
+
+        error = retryResult.error;
     }
-
-    const { error } = await supabase
-        .from("profiles")
-        .upsert(updatePayload, { onConflict: "id" });
 
     if (error) {
         console.error("Supabase updateProfile error:", error);
