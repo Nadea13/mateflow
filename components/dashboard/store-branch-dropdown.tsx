@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, Sparkles, UserPlus, KeyRound, Shield, ShieldCheck, MapPin, ChevronRight } from "lucide-react";
+import { Store, Building2, ChevronDown, Check, Plus, ArrowLeftRight, Settings, Loader2, Sparkles, UserPlus, KeyRound, Shield, ShieldCheck, MapPin, ChevronRight, User } from "lucide-react";
 import Link from "next/link";
 import { switchActiveStore } from "@/lib/actions/profile";
 import { joinStoreWithCode } from "@/app/actions/team";
@@ -24,7 +24,7 @@ interface StoreBranchDropdownProps {
 }
 
 export function StoreBranchDropdown({
-    storeName = "My Store",
+    storeName: initialStoreName,
     activeStoreId,
     userRole = "owner",
     assignedBranchId,
@@ -40,8 +40,10 @@ export function StoreBranchDropdown({
     const [joining, setJoining] = useState(false);
     const [switchingStoreId, setSwitchingStoreId] = useState<string | null>(null);
 
-    // Selected Store inside Switch Modal (to expand and view its branches)
-    const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
+    // Find current active store object
+    const currentStoreObj = stores.find(s => s.id === activeStoreId) || stores[0];
+    const displayStoreName = initialStoreName?.trim() || currentStoreObj?.store_name || "ร้านค้าของคุณ";
+    const effectiveRole = currentStoreObj?.user_role || userRole || "owner";
 
     // Filter accessible locations based on employee assigned_branch_id
     const accessibleLocations = assignedBranchId 
@@ -57,15 +59,15 @@ export function StoreBranchDropdown({
     const branchLabel = activeBranch ? activeBranch.name : (accessibleLocations.length > 0 ? accessibleLocations[0]?.name : "สาขาหลัก");
 
     // Format Role Thai Label
-    const roleLabels: Record<string, { label: string; color: string }> = {
-        owner: { label: "เจ้าของร้าน", color: "bg-primary/10 text-primary border-primary/20" },
-        admin: { label: "ผู้จัดการสาขา", color: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20" },
-        accountant: { label: "ฝ่ายบัญชี", color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
-        stock_keeper: { label: "ผู้ดูแลคลัง", color: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
-        sales: { label: "พนักงานขาย", color: "bg-sky-500/10 text-sky-500 border-sky-500/20" },
+    const roleLabels: Record<string, { label: string; color: string; iconBg: string }> = {
+        owner: { label: "เจ้าของร้าน", color: "bg-primary/10 text-primary border-primary/20", iconBg: "bg-primary/10 text-primary" },
+        admin: { label: "ผู้จัดการสาขา", color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20", iconBg: "bg-indigo-500/10 text-indigo-600" },
+        accountant: { label: "ฝ่ายบัญชี", color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", iconBg: "bg-emerald-500/10 text-emerald-600" },
+        stock_keeper: { label: "ผู้ดูแลคลัง", color: "bg-amber-500/10 text-amber-600 border-amber-500/20", iconBg: "bg-amber-500/10 text-amber-600" },
+        sales: { label: "พนักงานขาย", color: "bg-sky-500/10 text-sky-600 border-sky-500/20", iconBg: "bg-sky-500/10 text-sky-600" },
     };
 
-    const currentRoleBadge = roleLabels[userRole] || { label: userRole, color: "bg-muted text-muted-foreground border-border" };
+    const currentRoleBadge = roleLabels[effectiveRole] || { label: effectiveRole, color: "bg-muted text-muted-foreground border-border", iconBg: "bg-muted text-muted-foreground" };
 
     const handleSelectStore = async (store: any) => {
         setSwitchingStoreId(store.id);
@@ -120,13 +122,13 @@ export function StoreBranchDropdown({
                 <PopoverTrigger asChild>
                     <button className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border border-border/80 bg-sidebar-accent/40 hover:bg-sidebar-accent hover:border-border transition-all duration-150 text-left shadow-2xs group cursor-pointer">
                         <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="p-1.5 rounded-md bg-primary/10 text-primary shrink-0">
+                            <div className={`p-1.5 rounded-md ${currentRoleBadge.iconBg} shrink-0`}>
                                 <Store className="h-3.5 w-3.5" />
                             </div>
                             <div className="flex flex-col min-w-0">
                                 <div className="flex items-center gap-1.5 leading-none">
                                     <span className="text-xs font-bold text-foreground truncate max-w-[100px]">
-                                        {storeName}
+                                        {displayStoreName}
                                     </span>
                                     {/* Role Badge Indicator */}
                                     <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border shrink-0 ${currentRoleBadge.color}`}>
@@ -143,25 +145,35 @@ export function StoreBranchDropdown({
                     </button>
                 </PopoverTrigger>
 
-                <PopoverContent align="start" side="bottom" className="w-72 p-2 shadow-2xl border-border bg-popover/95 backdrop-blur-xl rounded-xl space-y-2.5 z-50">
-                    {/* Active Store Header & Actions */}
-                    <div className="p-2.5 rounded-lg bg-muted/50 border border-border/60">
+                <PopoverContent align="start" side="bottom" className="w-80 p-2.5 shadow-2xl border-border bg-popover/95 backdrop-blur-xl rounded-xl space-y-2.5 z-50">
+                    {/* Active Store Card */}
+                    <div className="p-2.5 rounded-xl bg-muted/60 border border-border/70">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 min-w-0">
-                                <div className="p-1.5 rounded-md bg-primary/10 text-primary shrink-0">
-                                    <Store className="h-4 w-4" />
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="h-8 w-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0 overflow-hidden">
+                                    {currentStoreObj?.avatar_url ? (
+                                        <img src={currentStoreObj.avatar_url} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        displayStoreName.charAt(0).toUpperCase()
+                                    )}
                                 </div>
                                 <div className="flex flex-col min-w-0">
-                                    <span className="text-xs font-bold text-foreground truncate max-w-[100px]">{storeName}</span>
-                                    <span className="text-[10px] font-semibold text-primary">ตำแหน่ง: {currentRoleBadge.label}</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-bold text-foreground truncate max-w-[110px]">
+                                            {displayStoreName}
+                                        </span>
+                                    </div>
+                                    <span className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
+                                        <User className="h-2.5 w-2.5 text-primary" /> ตำแหน่ง: <span className="text-primary font-bold">{currentRoleBadge.label}</span>
+                                    </span>
                                 </div>
                             </div>
                             
                             {/* Action Buttons: 1. ตั้งค่า, 2. สลับร้าน */}
-                            <div className="flex items-center gap-2 shrink-0">
-                                {userRole === "owner" && (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                {effectiveRole === "owner" && (
                                     <Link href="/dashboard/store" onClick={() => setOpen(false)}>
-                                        <span className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer flex items-center gap-0.5 transition-colors">
+                                        <span className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer flex items-center gap-0.5 transition-colors px-1.5 py-1 rounded hover:bg-muted">
                                             <Settings className="h-3 w-3" />
                                             ตั้งค่า
                                         </span>
@@ -174,7 +186,7 @@ export function StoreBranchDropdown({
                                         setOpen(false);
                                         setSwitchStoreOpen(true);
                                     }}
-                                    className="text-[10px] bg-primary/10 hover:bg-primary/20 text-primary font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer"
+                                    className="text-[10px] bg-primary/10 hover:bg-primary/20 text-primary font-semibold px-2 py-1 rounded-md flex items-center gap-1 transition-colors cursor-pointer"
                                     title="สลับไปร้านอื่น"
                                 >
                                     <ArrowLeftRight className="h-2.5 w-2.5" />
@@ -192,7 +204,7 @@ export function StoreBranchDropdown({
                     </div>
 
                     {/* Branches Selection List */}
-                    <div className="space-y-1 max-h-40 overflow-y-auto pr-0.5">
+                    <div className="space-y-1 max-h-44 overflow-y-auto pr-0.5">
                         {accessibleLocations.length === 0 ? (
                             <button
                                 onClick={() => {
@@ -208,7 +220,7 @@ export function StoreBranchDropdown({
                                 <div className="flex items-center gap-2 min-w-0">
                                     <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
                                     <div className="flex flex-col text-left min-w-0">
-                                        <span className="truncate">สาขาหลัก (Headquarters)</span>
+                                        <span className="truncate font-semibold">สาขาหลัก (Headquarters)</span>
                                         <span className="text-[10px] text-muted-foreground font-normal">คลังสินค้าเริ่มต้น</span>
                                     </div>
                                 </div>
@@ -233,7 +245,7 @@ export function StoreBranchDropdown({
                                         <div className="flex items-center gap-2 min-w-0">
                                             <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
                                             <div className="flex flex-col text-left min-w-0">
-                                                <span className="truncate max-w-[170px]">{loc.name}</span>
+                                                <span className="truncate max-w-[170px] font-semibold">{loc.name}</span>
                                                 <span className="text-[10px] text-muted-foreground font-normal truncate max-w-[170px]">
                                                     {loc.code ? `รหัส: ${loc.code}` : loc.address || "สาขา / คลัง"}
                                                 </span>
@@ -248,7 +260,7 @@ export function StoreBranchDropdown({
 
                     {/* Bottom Action Buttons */}
                     <div className="pt-2 border-t border-border space-y-1">
-                        {userRole === "owner" && (
+                        {effectiveRole === "owner" && (
                             <>
                                 <button
                                     type="button"
@@ -291,7 +303,7 @@ export function StoreBranchDropdown({
                 </PopoverContent>
             </Popover>
 
-            {/* Modal 1: Switch Store Dialog (Shows stores, roles, and branch info) */}
+            {/* Modal 1: Switch Store Dialog */}
             <Dialog open={switchStoreOpen} onOpenChange={setSwitchStoreOpen}>
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
@@ -310,9 +322,8 @@ export function StoreBranchDropdown({
 
                     <div className="space-y-2.5 py-3 max-h-[340px] overflow-y-auto pr-1">
                         {stores.map((s) => {
-                            const isCurrent = s.id === activeStoreId || s.store_name === storeName;
+                            const isCurrent = s.id === activeStoreId || s.store_name === displayStoreName;
                             const isSwitching = switchingStoreId === s.id;
-                            const isExpanded = expandedStoreId === s.id || isCurrent;
                             const storeRole = s.user_role || (s.owner_id === s.id ? "owner" : "owner");
                             const badge = roleLabels[storeRole] || roleLabels.owner;
                             const storeBranches = s.branches || [];
@@ -331,8 +342,6 @@ export function StoreBranchDropdown({
                                         onClick={() => {
                                             if (!isCurrent) {
                                                 handleSelectStore(s);
-                                            } else {
-                                                setExpandedStoreId(expandedStoreId === s.id ? null : s.id);
                                             }
                                         }}
                                         className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/30 transition-colors"
@@ -417,7 +426,7 @@ export function StoreBranchDropdown({
                             ใส่รหัสเข้าร่วมร้าน
                         </Button>
 
-                        {userRole === "owner" && (
+                        {effectiveRole === "owner" && (
                             <Button
                                 type="button"
                                 size="sm"
