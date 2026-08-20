@@ -1,9 +1,11 @@
-import { createServerClient } from "@supabase/ssr"
-import { NextResponse, type NextRequest } from "next/server"
+﻿import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
-    let supabaseResponse = NextResponse.next({
-        request,
+    let response = NextResponse.next({
+        request: {
+            headers: request.headers,
+        },
     })
 
     const supabase = createServerClient(
@@ -11,19 +13,42 @@ export async function updateSession(request: NextRequest) {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
             cookies: {
-                getAll() {
-                    return request.cookies.getAll()
+                get(name: string) {
+                    return request.cookies.get(name)?.value
                 },
-                setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value, options }) =>
-                        request.cookies.set(name, value)
-                    )
-                    supabaseResponse = NextResponse.next({
-                        request,
+                set(name: string, value: string, options: CookieOptions) {
+                    request.cookies.set({
+                        name,
+                        value,
+                        ...options,
                     })
-                    cookiesToSet.forEach(({ name, value, options }) =>
-                        supabaseResponse.cookies.set(name, value, options)
-                    )
+                    response = NextResponse.next({
+                        request: {
+                            headers: request.headers,
+                        },
+                    })
+                    response.cookies.set({
+                        name,
+                        value,
+                        ...options,
+                    })
+                },
+                remove(name: string, options: CookieOptions) {
+                    request.cookies.set({
+                        name,
+                        value: '',
+                        ...options,
+                    })
+                    response = NextResponse.next({
+                        request: {
+                            headers: request.headers,
+                        },
+                    })
+                    response.cookies.set({
+                        name,
+                        value: '',
+                        ...options,
+                    })
                 },
             },
         }
@@ -36,12 +61,21 @@ export async function updateSession(request: NextRequest) {
 
     // --- Role-Based Access Control (RBAC) ---
     if (user && request.nextUrl.pathname.startsWith("/dashboard")) {
-        // Fetch the user's role from the profiles table
-        const { data: profile } = await supabase
-            .from("profiles")
+        // Fetch the user's role from stores or profiles table
+        let { data: profile } = await supabase
+            .from("stores")
             .select("role")
             .eq("id", user.id)
-            .single()
+            .maybeSingle()
+
+        if (!profile) {
+            const fallback = await supabase
+                .from("profiles")
+                .select("role")
+                .eq("id", user.id)
+                .maybeSingle()
+            profile = fallback.data
+        }
 
         const role = profile?.role || "owner" // Default to owner if not set
         const path = request.nextUrl.pathname
@@ -51,7 +85,8 @@ export async function updateSession(request: NextRequest) {
             if (
                 path.startsWith("/dashboard/settings") ||
                 path.startsWith("/dashboard/expenses") ||
-                path.startsWith("/dashboard/inventory")
+                path.startsWith("/dashboard/inventory") ||
+                path.startsWith("/dashboard/store")
             ) {
                 return NextResponse.redirect(new URL("/dashboard", request.url))
             }
@@ -59,11 +94,9 @@ export async function updateSession(request: NextRequest) {
 
         // 2. Admin Role Restrictions
         if (role === "admin") {
-            if (path.startsWith("/dashboard/expenses")) {
-                return NextResponse.redirect(new URL("/dashboard", request.url))
-            }
+            // Admins can do everything except maybe delete store/workspace
         }
     }
 
-    return supabaseResponse
+    return response
 }

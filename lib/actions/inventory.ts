@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
@@ -9,17 +9,30 @@ export async function getLocations() {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    const { data: locations, error } = await supabase
-        .from("locations")
+    // Query branchs table first, fallback to locations if schema not yet migrated
+    let { data: branchs, error } = await supabase
+        .from("branchs")
         .select("*")
         .order("created_at", { ascending: true });
 
     if (error) {
-        console.error("Error fetching locations:", error);
+        // Fallback for backward compatibility
+        const fallback = await supabase
+            .from("locations")
+            .select("*")
+            .order("created_at", { ascending: true });
+        branchs = fallback.data;
+    }
+
+    if (!branchs) {
         return [];
     }
 
-    return locations as Location[];
+    return branchs.map((b: any) => ({
+        ...b,
+        user_id: b.store_id || b.user_id,
+        store_id: b.store_id || b.user_id,
+    })) as Location[];
 }
 
 export async function createLocation(data: Partial<Location>) {
@@ -31,17 +44,32 @@ export async function createLocation(data: Partial<Location>) {
         return { error: "Unauthorized" };
     }
 
-    const { error } = await supabase.from("locations").insert({
+    const payload: any = {
         ...data,
-        user_id: user.id,
-    });
+        store_id: user.id,
+    };
+
+    // Try inserting into branchs table with store_id
+    let { error } = await supabase.from("branchs").insert(payload);
 
     if (error) {
-        console.error("Error creating location:", error);
+        // Fallback to locations table with user_id
+        const fallback = await supabase.from("locations").insert({
+            ...data,
+            user_id: user.id,
+        });
+        error = fallback.error;
+    }
+
+    if (error) {
+        console.error("Error creating branch:", error);
         return { error: error.message };
     }
 
     revalidatePath("/dashboard/inventory", "page");
+    revalidatePath("/dashboard/catalog", "page");
+    revalidatePath("/dashboard/store", "page");
+    revalidatePath("/dashboard");
     return { success: true };
 }
 
@@ -49,17 +77,29 @@ export async function updateLocation(id: string, data: Partial<Location>) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    const { error } = await supabase.from("locations").update({
+    let { error } = await supabase.from("branchs").update({
         ...data,
         updated_at: new Date().toISOString()
     }).eq("id", id);
 
     if (error) {
-        console.error("Error updating location:", error);
+        // Fallback to locations table
+        const fallback = await supabase.from("locations").update({
+            ...data,
+            updated_at: new Date().toISOString()
+        }).eq("id", id);
+        error = fallback.error;
+    }
+
+    if (error) {
+        console.error("Error updating branch:", error);
         return { error: error.message };
     }
 
     revalidatePath("/dashboard/inventory", "page");
+    revalidatePath("/dashboard/catalog", "page");
+    revalidatePath("/dashboard/store", "page");
+    revalidatePath("/dashboard");
     return { success: true };
 }
 
@@ -69,7 +109,7 @@ export async function getInventoryLevels(locationId?: string) {
 
     let query = supabase.from("inventory_levels").select(`
         *,
-        location:locations(name),
+        location:branchs(name),
         product:products(name)
     `);
 
@@ -77,10 +117,20 @@ export async function getInventoryLevels(locationId?: string) {
         query = query.eq("location_id", locationId);
     }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
 
     if (error) {
-        console.error("Error fetching inventory levels:", error);
+        // Fallback to locations relation
+        const fallbackQuery = supabase.from("inventory_levels").select(`
+            *,
+            location:locations(name),
+            product:products(name)
+        `);
+        const fallbackRes = locationId ? await fallbackQuery.eq("location_id", locationId) : await fallbackQuery;
+        data = fallbackRes.data;
+    }
+
+    if (!data) {
         return [];
     }
 
@@ -136,7 +186,8 @@ export async function adjustInventory(productId: string, locationId: string, qua
         updated_at: new Date().toISOString()
     }).eq("id", productId);
 
-    revalidatePath("/dashboard/catalog", "page"); revalidatePath("/dashboard/inventory", "page");
+    revalidatePath("/dashboard/catalog", "page");
+    revalidatePath("/dashboard/inventory", "page");
     revalidatePath("/dashboard/catalog");
     return { success: true, newQuantity, totalStock };
 }

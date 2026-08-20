@@ -108,6 +108,13 @@ export interface Profile {
     updated_at: string
 }
 
+export interface Store extends Profile {
+    store_address?: string
+    tax_id?: string
+    store_phone?: string
+    signature_url?: string
+}
+
 export interface Expense {
     id: string
     user_id: string
@@ -166,9 +173,10 @@ export interface PurchaseOrder {
     items?: POItem[]
 }
 
-export interface Location {
+export interface Branch {
     id: string
-    user_id: string
+    store_id?: string
+    user_id?: string
     name: string
     code?: string
     type: "warehouse" | "storefront" | "3pl" | "other"
@@ -177,6 +185,9 @@ export interface Location {
     created_at: string
     updated_at: string
 }
+
+// Backward compatibility alias
+export type Location = Branch;
 
 export interface InventoryLevel {
     id: string

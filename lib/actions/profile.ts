@@ -14,11 +14,21 @@ export async function getUserProfile() {
 
     if (!user) return null;
 
-    const { data: profile } = await supabase
-        .from("profiles")
+    // Try stores table first, fallback to profiles
+    let { data: profile } = await supabase
+        .from("stores")
         .select("*")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
+
+    if (!profile) {
+        const fallback = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", user.id)
+            .maybeSingle();
+        profile = fallback.data;
+    }
 
     return profile as Profile | null;
 }
@@ -47,11 +57,20 @@ export async function getStoreProfile() {
 
     if (!user) return null;
 
-    const { data: profile } = await supabase
-        .from("profiles")
+    let { data: profile } = await supabase
+        .from("stores")
         .select("*")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
+
+    if (!profile) {
+        const fallback = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", user.id)
+            .maybeSingle();
+        profile = fallback.data;
+    }
 
     return {
         id: user.id,
@@ -76,11 +95,20 @@ export async function getProfile() {
 
     if (!user) return null;
 
-    const { data: profile } = await supabase
-        .from("profiles")
+    let { data: profile } = await supabase
+        .from("stores")
         .select("*")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
+
+    if (!profile) {
+        const fallback = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", user.id)
+            .maybeSingle();
+        profile = fallback.data;
+    }
 
     return {
         id: user.id,
@@ -154,53 +182,73 @@ export async function updateProfile(data: {
     if (data.avatar_url !== undefined) fullPayload.avatar_url = data.avatar_url;
     if (data.signature_url !== undefined) fullPayload.signature_url = data.signature_url;
 
+    // 1. Try upserting to stores table first
     let { error } = await supabase
-        .from("profiles")
+        .from("stores")
         .upsert(fullPayload, { onConflict: "id" });
 
-    // Fallback: If local/remote Postgres schema doesn't have tax_id / signature_url / store_phone columns yet
-    if (error && (error.code === "PGRST204" || error.message?.includes("column"))) {
-        console.warn("Retrying profile upsert with core schema fields due to missing columns:", error.message);
-        
-        const corePayload: any = {
-            id: user.id,
-            updated_at: new Date().toISOString(),
-        };
-        if (data.store_name !== undefined) corePayload.store_name = data.store_name;
-        if (data.avatar_url !== undefined) corePayload.avatar_url = data.avatar_url;
-        
-        const retryResult = await supabase
+    // Fallback: If stores table doesn't exist yet, upsert to profiles
+    if (error) {
+        let profileUpsert = await supabase
             .from("profiles")
-            .upsert(corePayload, { onConflict: "id" });
+            .upsert(fullPayload, { onConflict: "id" });
+        error = profileUpsert.error;
 
-        error = retryResult.error;
+        if (error && (error.code === "PGRST204" || error.message?.includes("column"))) {
+            const corePayload: any = {
+                id: user.id,
+                updated_at: new Date().toISOString(),
+            };
+            if (data.store_name !== undefined) corePayload.store_name = data.store_name;
+            if (data.avatar_url !== undefined) corePayload.avatar_url = data.avatar_url;
+            
+            const retryResult = await supabase
+                .from("profiles")
+                .upsert(corePayload, { onConflict: "id" });
+
+            error = retryResult.error;
+        }
     }
 
     if (error) {
-        console.error("Supabase updateProfile error:", error);
-        return { error: error.message || "Failed to update profile" };
+        console.error("Supabase updateStore error:", error);
+        return { error: error.message || "Failed to update store profile" };
     }
 
-    // AUTO-CREATE / ENSURE PRIMARY HEADQUARTERS LOCATION for the new store
+    // AUTO-CREATE / ENSURE PRIMARY HEADQUARTERS BRANCH for the new store
     try {
-        const { data: existingLocations } = await supabase
-            .from("locations")
+        let { data: existingBranches } = await supabase
+            .from("branchs")
             .select("id")
-            .eq("user_id", user.id);
+            .eq("store_id", user.id);
 
-        if (!existingLocations || existingLocations.length === 0) {
+        if (!existingBranches || existingBranches.length === 0) {
             const branchName = data.store_name ? `${data.store_name} (สาขาหลัก)` : "สาขาหลัก (Headquarters)";
-            await supabase.from("locations").insert({
-                user_id: user.id,
+            
+            // Try inserting into branchs with store_id
+            const branchInsert = await supabase.from("branchs").insert({
+                store_id: user.id,
                 name: branchName,
                 code: "HQ-01",
                 type: "warehouse",
                 country: "TH",
                 address: data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก",
             });
+
+            if (branchInsert.error) {
+                // Fallback to locations table with user_id
+                await supabase.from("locations").insert({
+                    user_id: user.id,
+                    name: branchName,
+                    code: "HQ-01",
+                    type: "warehouse",
+                    country: "TH",
+                    address: data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก",
+                });
+            }
         }
     } catch (locErr) {
-        console.warn("Auto-location creation warning:", locErr);
+        console.warn("Auto-branch creation warning:", locErr);
     }
 
     revalidatePath("/dashboard/settings");
@@ -217,8 +265,8 @@ export async function updateETaxSettings(data: { etax_enabled: boolean; etax_api
 
     if (!user) return { error: "Unauthorized" };
 
-    const { error } = await supabase
-        .from("profiles")
+    let { error } = await supabase
+        .from("stores")
         .upsert({
             id: user.id,
             etax_enabled: data.etax_enabled,
@@ -228,8 +276,15 @@ export async function updateETaxSettings(data: { etax_enabled: boolean; etax_api
         });
 
     if (error) {
-        console.error("Error updating E-Tax settings:", error);
-        return { error: "Failed to update E-Tax settings" };
+        await supabase
+            .from("profiles")
+            .upsert({
+                id: user.id,
+                etax_enabled: data.etax_enabled,
+                etax_api_key: data.etax_api_key,
+                etax_company_id: data.etax_company_id,
+                updated_at: new Date().toISOString(),
+            });
     }
 
     revalidatePath("/dashboard/tax");
@@ -243,8 +298,8 @@ export async function updateStripeKeys(data: { stripe_publishable_key?: string; 
 
     if (!user) return { error: "Unauthorized" };
 
-    const { error } = await supabase
-        .from("profiles")
+    let { error } = await supabase
+        .from("stores")
         .upsert({
             id: user.id,
             stripe_publishable_key: data.stripe_publishable_key,
@@ -253,8 +308,14 @@ export async function updateStripeKeys(data: { stripe_publishable_key?: string; 
         });
 
     if (error) {
-        console.error("Error updating Stripe keys:", error);
-        return { error: "Failed to update Stripe keys" };
+        await supabase
+            .from("profiles")
+            .upsert({
+                id: user.id,
+                stripe_publishable_key: data.stripe_publishable_key,
+                stripe_secret_key: data.stripe_secret_key,
+                updated_at: new Date().toISOString(),
+            });
     }
 
     revalidatePath("/dashboard/settings");
@@ -288,8 +349,8 @@ export async function uploadAvatar(formData: FormData) {
         .from("avatars")
         .getPublicUrl(filePath);
 
-    const { error: updateError } = await supabase
-        .from("profiles")
+    let { error: updateError } = await supabase
+        .from("stores")
         .upsert({
             id: user.id,
             avatar_url: publicUrl,
@@ -297,7 +358,13 @@ export async function uploadAvatar(formData: FormData) {
         });
 
     if (updateError) {
-        return { error: "Failed to update profile with avatar" };
+        await supabase
+            .from("profiles")
+            .upsert({
+                id: user.id,
+                avatar_url: publicUrl,
+                updated_at: new Date().toISOString(),
+            });
     }
 
     revalidatePath("/dashboard/settings");
@@ -332,8 +399,8 @@ export async function uploadSignature(formData: FormData) {
         .from("avatars")
         .getPublicUrl(filePath);
 
-    const { error: updateError } = await supabase
-        .from("profiles")
+    let { error: updateError } = await supabase
+        .from("stores")
         .upsert({
             id: user.id,
             signature_url: publicUrl,
@@ -341,7 +408,13 @@ export async function uploadSignature(formData: FormData) {
         });
 
     if (updateError) {
-        return { error: "Failed to update profile with signature" };
+        await supabase
+            .from("profiles")
+            .upsert({
+                id: user.id,
+                signature_url: publicUrl,
+                updated_at: new Date().toISOString(),
+            });
     }
 
     revalidatePath("/dashboard/settings");
@@ -363,17 +436,12 @@ export async function deleteAccount() {
     await supabase.from("customers").delete().eq("user_id", user.id);
     await supabase.from("suppliers").delete().eq("user_id", user.id);
     await supabase.from("purchase_orders").delete().eq("user_id", user.id);
+    await supabase.from("branchs").delete().eq("store_id", user.id);
+    await supabase.from("locations").delete().eq("user_id", user.id);
 
-    // 2. Delete Profile
-    const { error } = await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", user.id);
-
-    if (error) {
-        console.error("Error deleting profile:", error);
-        return { error: "Failed to delete profile data" };
-    }
+    // 2. Delete Store / Profile
+    await supabase.from("stores").delete().eq("id", user.id);
+    await supabase.from("profiles").delete().eq("id", user.id);
 
     // 3. Sign out session
     await supabase.auth.signOut();
