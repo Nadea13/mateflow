@@ -18,7 +18,7 @@ import {
 import { useTranslation } from "@/lib/i18n/provider"
 import { MateFlowLogo } from "@/components/brand/mateflow-logo"
 import { StoreBranchDropdown } from "@/components/dashboard/store-branch-dropdown"
-import { Location } from "@/types"
+import { Location, Store as StoreType } from "@/types"
 
 const sidebarItems = [
     {
@@ -71,10 +71,12 @@ const sidebarItems = [
 interface SidebarProps {
     userRole?: "owner" | "admin" | "sales";
     storeName?: string;
+    activeStoreId?: string;
+    stores?: any[];
     locations?: Location[];
 }
 
-export function Sidebar({ userRole = "owner", storeName, locations = [] }: SidebarProps) {
+export function Sidebar({ userRole = "owner", storeName, activeStoreId, stores = [], locations = [] }: SidebarProps) {
     const pathname = usePathname()
     const { t } = useTranslation()
 
@@ -90,6 +92,8 @@ export function Sidebar({ userRole = "owner", storeName, locations = [] }: Sideb
                 <div className="px-3 mb-4">
                     <StoreBranchDropdown
                         storeName={storeName}
+                        activeStoreId={activeStoreId}
+                        stores={stores}
                         locations={locations}
                     />
                 </div>

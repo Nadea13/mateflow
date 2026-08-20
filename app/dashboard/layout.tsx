@@ -1,7 +1,7 @@
 ﻿import { Sidebar } from "@/components/dashboard/sidebar"
 import { MobileNav } from "@/components/dashboard/mobile-nav"
 import { TopBar } from "@/components/dashboard/top-bar"
-import { getUserProfile, getProfile } from "@/lib/actions/profile"
+import { getUserProfile, getProfile, getStores } from "@/lib/actions/profile"
 import { getLocations } from "@/lib/actions/inventory"
 
 export default async function DashboardLayout({
@@ -11,16 +11,20 @@ export default async function DashboardLayout({
 }) {
     const profile = await getUserProfile();
     const storeProfile = await getProfile();
+    const stores = await getStores();
     const locations = await getLocations();
     const role = profile?.role || 'owner';
 
     const storeName = storeProfile?.store_name || "";
+    const activeStoreId = storeProfile?.id || "";
 
     return (
         <div className="flex min-h-screen w-full overflow-x-hidden bg-background text-foreground">
             <Sidebar
                 userRole={role}
                 storeName={storeName}
+                activeStoreId={activeStoreId}
+                stores={stores}
                 locations={locations}
             />
             <div className="flex-1 md:pl-60 flex flex-col min-w-0 w-full overflow-x-hidden">

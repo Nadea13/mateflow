@@ -1,26 +1,35 @@
 ﻿"use client";
 
 import { useState } from "react";
-import { Store, Building2, ChevronDown, Plus, Check, PlusCircle, Settings, StoreIcon } from "lucide-react";
+import { Store, Building2, ChevronDown, Plus, Check, Settings, ArrowLeftRight, CheckCircle2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { LocationDialog } from "@/components/inventory/location-dialog";
 import { CreateStoreDialog } from "@/components/store/create-store-dialog";
 import { Location } from "@/types";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 interface StoreBranchDropdownProps {
     storeName?: string;
+    activeStoreId?: string;
+    stores?: any[];
     locations?: Location[];
 }
 
 export function StoreBranchDropdown({
     storeName,
+    activeStoreId,
+    stores = [],
     locations = [],
 }: StoreBranchDropdownProps) {
+    const router = useRouter();
     const [open, setOpen] = useState(false);
     const [addBranchOpen, setAddBranchOpen] = useState(false);
     const [createStoreOpen, setCreateStoreOpen] = useState(false);
+    const [switchStoreOpen, setSwitchStoreOpen] = useState(false);
     const [selectedBranchId, setSelectedBranchId] = useState<string>(locations[0]?.id || "main");
 
     const hasStore = !!storeName && storeName.trim().length > 0;
@@ -48,6 +57,14 @@ export function StoreBranchDropdown({
         );
     }
 
+    const handleSelectStore = (store: any) => {
+        setSwitchStoreOpen(false);
+        toast.success(`สลับไปที่ร้าน "${store.store_name}" เรียบร้อยแล้ว`);
+        // Navigate or refresh to load this store's scope
+        router.push(`/dashboard/store?storeId=${store.id}`);
+        router.refresh();
+    };
+
     return (
         <>
             <Popover open={open} onOpenChange={setOpen}>
@@ -74,7 +91,7 @@ export function StoreBranchDropdown({
                 </PopoverTrigger>
 
                 <PopoverContent align="start" side="bottom" className="w-72 p-2 shadow-2xl border-border bg-popover/95 backdrop-blur-xl rounded-xl space-y-2.5 z-50">
-                    {/* Active Store Header & Quick Actions */}
+                    {/* Active Store Header & Actions (Settings + Switch Store Button on the right) */}
                     <div className="p-2.5 rounded-lg bg-muted/50 border border-border/60">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 min-w-0">
@@ -82,16 +99,33 @@ export function StoreBranchDropdown({
                                     <Store className="h-4 w-4" />
                                 </div>
                                 <div className="flex flex-col min-w-0">
-                                    <span className="text-xs font-bold text-foreground truncate">{storeName}</span>
-                                    <span className="text-[10px] text-muted-foreground">ร้านค้าที่กำลังใช้งาน</span>
+                                    <span className="text-xs font-bold text-foreground truncate max-w-[100px]">{storeName}</span>
+                                    <span className="text-[10px] text-muted-foreground">ร้านปัจจุบัน</span>
                                 </div>
                             </div>
-                            <Link href="/dashboard/store" onClick={() => setOpen(false)}>
-                                <span className="text-[10px] text-primary hover:underline font-semibold cursor-pointer flex items-center gap-0.5">
-                                    <Settings className="h-3 w-3" />
-                                    ตั้งค่า
-                                </span>
-                            </Link>
+                            
+                            {/* Action Buttons: 1. ตั้งค่า, 2. สลับร้าน (ทางขวาของตั้งค่า) */}
+                            <div className="flex items-center gap-2 shrink-0">
+                                <Link href="/dashboard/store" onClick={() => setOpen(false)}>
+                                    <span className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer flex items-center gap-0.5 transition-colors">
+                                        <Settings className="h-3 w-3" />
+                                        ตั้งค่า
+                                    </span>
+                                </Link>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setOpen(false);
+                                        setSwitchStoreOpen(true);
+                                    }}
+                                    className="text-[10px] bg-primary/10 hover:bg-primary/20 text-primary font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer"
+                                    title="สลับไปร้านอื่น"
+                                >
+                                    <ArrowLeftRight className="h-2.5 w-2.5" />
+                                    เปลี่ยนร้าน
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -182,12 +216,91 @@ export function StoreBranchDropdown({
                             }}
                             className="w-full h-8 text-xs font-semibold justify-center gap-1.5 border-border hover:bg-muted/60 text-muted-foreground hover:text-foreground rounded-lg cursor-pointer"
                         >
-                            <StoreIcon className="h-3.5 w-3.5" />
+                            <Store className="h-3.5 w-3.5" />
                             <span>+ เพิ่มร้านใหม่</span>
                         </Button>
                     </div>
                 </PopoverContent>
             </Popover>
+
+            {/* Modal Switch Store (เลือกร้านค้า) */}
+            <Dialog open={switchStoreOpen} onOpenChange={setSwitchStoreOpen}>
+                <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                                <ArrowLeftRight className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-base font-semibold">เลือกร้านค้าที่ต้องการจัดการ</DialogTitle>
+                                <DialogDescription className="text-xs text-muted-foreground">
+                                    คุณมีร้านค้าทั้งหมด {stores.length > 0 ? stores.length : 1} ร้าน
+                                </DialogDescription>
+                            </div>
+                        </div>
+                    </DialogHeader>
+
+                    <div className="space-y-2 py-3 max-h-64 overflow-y-auto">
+                        {stores.length === 0 ? (
+                            <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 flex items-center justify-between">
+                                <div className="flex items-center gap-2.5">
+                                    <Store className="h-4 w-4 text-primary" />
+                                    <span className="text-xs font-semibold">{storeName}</span>
+                                </div>
+                                <span className="text-[10px] text-primary font-bold">กำลังใช้งาน</span>
+                            </div>
+                        ) : (
+                            stores.map((s) => {
+                                const isCurrent = (s.id === activeStoreId) || (s.store_name === storeName);
+                                return (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => handleSelectStore(s)}
+                                        className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                            isCurrent
+                                                ? "border-primary bg-primary/10 shadow-xs"
+                                                : "border-border/80 hover:border-primary/40 hover:bg-muted/50"
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            {s.avatar_url ? (
+                                                <img src={s.avatar_url} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                                            ) : (
+                                                <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+                                                    <Store className="h-4 w-4" />
+                                                </div>
+                                            )}
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="text-xs font-bold text-foreground truncate">{s.store_name || "ไม่มีชื่อร้าน"}</span>
+                                                <span className="text-[10px] text-muted-foreground truncate">{s.store_phone || s.store_address || "ร้านค้าของคุณ"}</span>
+                                            </div>
+                                        </div>
+                                        {isCurrent && (
+                                            <div className="flex items-center gap-1 text-[11px] font-semibold text-primary shrink-0">
+                                                <CheckCircle2 className="h-4 w-4" />
+                                            </div>
+                                        )}
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+
+                    <div className="pt-2 border-t border-border/60">
+                        <Button
+                            size="sm"
+                            onClick={() => {
+                                setSwitchStoreOpen(false);
+                                setCreateStoreOpen(true);
+                            }}
+                            className="w-full h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
+                        >
+                            <Plus className="h-3.5 w-3.5" />
+                            สร้างร้านค้าใหม่อีกร้าน
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* Modal for adding a new location/branch */}
             <LocationDialog
