@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Profile } from "@/types";
+import { Profile, Store } from "@/types";
 
 export async function getUserProfile() {
     const cookieStore = await cookies();
@@ -14,23 +14,42 @@ export async function getUserProfile() {
 
     if (!user) return null;
 
-    // Try stores table first, fallback to profiles
-    let { data: profile } = await supabase
-        .from("stores")
+    // 1. Fetch user profile from public.users table (or stores/profiles fallback)
+    let { data: dbUser } = await supabase
+        .from("users")
         .select("*")
         .eq("id", user.id)
         .maybeSingle();
 
-    if (!profile) {
-        const fallback = await supabase
-            .from("profiles")
+    // 2. Fetch associated store
+    let { data: store } = await supabase
+        .from("stores")
+        .select("*")
+        .eq("owner_id", user.id)
+        .maybeSingle();
+
+    if (!store) {
+        // Fallback query by id
+        const storeFallback = await supabase
+            .from("stores")
             .select("*")
             .eq("id", user.id)
             .maybeSingle();
-        profile = fallback.data;
+        store = storeFallback.data;
     }
 
-    return profile as Profile | null;
+    return {
+        id: user.id,
+        email: user.email || dbUser?.email || "",
+        store_name: store?.store_name || "",
+        avatar_url: store?.avatar_url || dbUser?.avatar_url || "",
+        owner_id: store?.owner_id || user.id,
+        role: store?.role || "owner",
+        default_currency: store?.default_currency || "THB",
+        country: store?.country || "TH",
+        tax_rate: store?.tax_rate || 7,
+        updated_at: store?.updated_at || new Date().toISOString(),
+    } as Profile;
 }
 
 export async function getAuthProfile() {
@@ -40,11 +59,17 @@ export async function getAuthProfile() {
 
     if (!user) return null;
 
+    let { data: dbUser } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+
     return {
         id: user.id,
-        email: user.email || "",
-        display_name: user.user_metadata?.full_name || user.user_metadata?.name || "",
-        avatar_url: user.user_metadata?.avatar_url || "",
+        email: user.email || dbUser?.email || "",
+        display_name: dbUser?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "",
+        avatar_url: dbUser?.avatar_url || user.user_metadata?.avatar_url || "",
         provider: user.app_metadata?.provider || "email",
         created_at: user.created_at || "",
     };
@@ -57,69 +82,41 @@ export async function getStoreProfile() {
 
     if (!user) return null;
 
-    let { data: profile } = await supabase
+    let { data: store } = await supabase
         .from("stores")
         .select("*")
-        .eq("id", user.id)
+        .eq("owner_id", user.id)
         .maybeSingle();
 
-    if (!profile) {
+    if (!store) {
+        // Fallback by id
         const fallback = await supabase
-            .from("profiles")
+            .from("stores")
             .select("*")
             .eq("id", user.id)
             .maybeSingle();
-        profile = fallback.data;
+        store = fallback.data;
     }
 
     return {
-        id: user.id,
-        store_name: profile?.store_name || "",
-        avatar_url: profile?.avatar_url || "",
-        store_address: profile?.store_address || "",
-        tax_id: profile?.tax_id || "",
-        signature_url: profile?.signature_url || "",
-        store_phone: profile?.store_phone || "",
-        role: profile?.role || "owner",
-        etax_enabled: profile?.etax_enabled || false,
-        etax_api_key: profile?.etax_api_key || "",
-        etax_company_id: profile?.etax_company_id || "",
+        id: store?.id || user.id,
+        owner_id: store?.owner_id || user.id,
+        store_name: store?.store_name || "",
+        avatar_url: store?.avatar_url || "",
+        store_address: store?.store_address || "",
+        tax_id: store?.tax_id || "",
+        signature_url: store?.signature_url || "",
+        store_phone: store?.store_phone || "",
+        role: store?.role || "owner",
+        etax_enabled: store?.etax_enabled || false,
+        etax_api_key: store?.etax_api_key || "",
+        etax_company_id: store?.etax_company_id || "",
     };
 }
 
 // Backward compatibility
 export async function getProfile() {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) return null;
-
-    let { data: profile } = await supabase
-        .from("stores")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
-
-    if (!profile) {
-        const fallback = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", user.id)
-            .maybeSingle();
-        profile = fallback.data;
-    }
-
-    return {
-        id: user.id,
-        email: user.email || "",
-        store_name: profile?.store_name || "",
-        avatar_url: profile?.avatar_url || "",
-        store_address: profile?.store_address || "",
-        tax_id: profile?.tax_id || "",
-        signature_url: profile?.signature_url || "",
-        store_phone: profile?.store_phone || "",
-    };
+    return getStoreProfile();
 }
 
 export async function getTeamMembers() {
@@ -154,6 +151,7 @@ export async function softDeleteAccount() {
 }
 
 export async function updateProfile(data: { 
+    store_id?: string;
     store_name?: string; 
     store_address?: string; 
     tax_id?: string; 
@@ -169,45 +167,55 @@ export async function updateProfile(data: {
         return { error: "User session expired. Please sign in again." };
     }
 
-    // Try primary payload with full fields
-    const fullPayload: any = {
-        id: user.id,
+    // 1. Check existing store for this owner
+    let existingStoreId = data.store_id;
+    if (!existingStoreId) {
+        const { data: existingStore } = await supabase
+            .from("stores")
+            .select("id")
+            .eq("owner_id", user.id)
+            .maybeSingle();
+
+        if (existingStore) {
+            existingStoreId = existingStore.id;
+        }
+    }
+
+    // 2. Prepare Store Payload (with independent UUID and owner_id)
+    const storePayload: any = {
+        owner_id: user.id,
         updated_at: new Date().toISOString(),
     };
 
-    if (data.store_name !== undefined) fullPayload.store_name = data.store_name;
-    if (data.store_address !== undefined) fullPayload.store_address = data.store_address;
-    if (data.tax_id !== undefined) fullPayload.tax_id = data.tax_id;
-    if (data.store_phone !== undefined) fullPayload.store_phone = data.store_phone;
-    if (data.avatar_url !== undefined) fullPayload.avatar_url = data.avatar_url;
-    if (data.signature_url !== undefined) fullPayload.signature_url = data.signature_url;
+    if (existingStoreId) {
+        storePayload.id = existingStoreId;
+    }
 
-    // 1. Try upserting to stores table first
-    let { error } = await supabase
+    if (data.store_name !== undefined) storePayload.store_name = data.store_name;
+    if (data.store_address !== undefined) storePayload.store_address = data.store_address;
+    if (data.tax_id !== undefined) storePayload.tax_id = data.tax_id;
+    if (data.store_phone !== undefined) storePayload.store_phone = data.store_phone;
+    if (data.avatar_url !== undefined) storePayload.avatar_url = data.avatar_url;
+    if (data.signature_url !== undefined) storePayload.signature_url = data.signature_url;
+
+    // 3. Upsert to stores table
+    let { data: savedStore, error } = await supabase
         .from("stores")
-        .upsert(fullPayload, { onConflict: "id" });
+        .upsert(storePayload)
+        .select("id")
+        .single();
 
-    // Fallback: If stores table doesn't exist yet, upsert to profiles
+    // Fallback: If stores table schema has backward-compatible id=user.id
     if (error) {
-        let profileUpsert = await supabase
-            .from("profiles")
-            .upsert(fullPayload, { onConflict: "id" });
-        error = profileUpsert.error;
-
-        if (error && (error.code === "PGRST204" || error.message?.includes("column"))) {
-            const corePayload: any = {
-                id: user.id,
-                updated_at: new Date().toISOString(),
-            };
-            if (data.store_name !== undefined) corePayload.store_name = data.store_name;
-            if (data.avatar_url !== undefined) corePayload.avatar_url = data.avatar_url;
-            
-            const retryResult = await supabase
-                .from("profiles")
-                .upsert(corePayload, { onConflict: "id" });
-
-            error = retryResult.error;
-        }
+        console.warn("Retrying store upsert with direct ID fallback:", error.message);
+        storePayload.id = user.id;
+        const retryResult = await supabase
+            .from("stores")
+            .upsert(storePayload, { onConflict: "id" })
+            .select("id")
+            .single();
+        error = retryResult.error;
+        savedStore = retryResult.data;
     }
 
     if (error) {
@@ -215,37 +223,26 @@ export async function updateProfile(data: {
         return { error: error.message || "Failed to update store profile" };
     }
 
-    // AUTO-CREATE / ENSURE PRIMARY HEADQUARTERS BRANCH for the new store
+    const currentStoreId = savedStore?.id || existingStoreId || user.id;
+
+    // 4. Auto-create / ensure primary headquarters branch for this store
     try {
         let { data: existingBranches } = await supabase
             .from("branchs")
             .select("id")
-            .eq("store_id", user.id);
+            .eq("store_id", currentStoreId);
 
         if (!existingBranches || existingBranches.length === 0) {
             const branchName = data.store_name ? `${data.store_name} (สาขาหลัก)` : "สาขาหลัก (Headquarters)";
             
-            // Try inserting into branchs with store_id
-            const branchInsert = await supabase.from("branchs").insert({
-                store_id: user.id,
+            await supabase.from("branchs").insert({
+                store_id: currentStoreId,
                 name: branchName,
                 code: "HQ-01",
                 type: "warehouse",
                 country: "TH",
                 address: data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก",
             });
-
-            if (branchInsert.error) {
-                // Fallback to locations table with user_id
-                await supabase.from("locations").insert({
-                    user_id: user.id,
-                    name: branchName,
-                    code: "HQ-01",
-                    type: "warehouse",
-                    country: "TH",
-                    address: data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก",
-                });
-            }
         }
     } catch (locErr) {
         console.warn("Auto-branch creation warning:", locErr);
@@ -255,7 +252,7 @@ export async function updateProfile(data: {
     revalidatePath("/dashboard/store");
     revalidatePath("/dashboard/catalog");
     revalidatePath("/dashboard");
-    return { success: true };
+    return { success: true, store_id: currentStoreId };
 }
 
 export async function updateETaxSettings(data: { etax_enabled: boolean; etax_api_key: string; etax_company_id: string }) {
@@ -265,26 +262,19 @@ export async function updateETaxSettings(data: { etax_enabled: boolean; etax_api
 
     if (!user) return { error: "Unauthorized" };
 
-    let { error } = await supabase
+    const { error } = await supabase
         .from("stores")
-        .upsert({
-            id: user.id,
+        .update({
             etax_enabled: data.etax_enabled,
             etax_api_key: data.etax_api_key,
             etax_company_id: data.etax_company_id,
             updated_at: new Date().toISOString(),
-        });
+        })
+        .eq("owner_id", user.id);
 
     if (error) {
-        await supabase
-            .from("profiles")
-            .upsert({
-                id: user.id,
-                etax_enabled: data.etax_enabled,
-                etax_api_key: data.etax_api_key,
-                etax_company_id: data.etax_company_id,
-                updated_at: new Date().toISOString(),
-            });
+        console.error("Error updating E-Tax settings:", error);
+        return { error: "Failed to update E-Tax settings" };
     }
 
     revalidatePath("/dashboard/tax");
@@ -298,128 +288,22 @@ export async function updateStripeKeys(data: { stripe_publishable_key?: string; 
 
     if (!user) return { error: "Unauthorized" };
 
-    let { error } = await supabase
+    const { error } = await supabase
         .from("stores")
-        .upsert({
-            id: user.id,
+        .update({
             stripe_publishable_key: data.stripe_publishable_key,
             stripe_secret_key: data.stripe_secret_key,
             updated_at: new Date().toISOString(),
-        });
+        })
+        .eq("owner_id", user.id);
 
     if (error) {
-        await supabase
-            .from("profiles")
-            .upsert({
-                id: user.id,
-                stripe_publishable_key: data.stripe_publishable_key,
-                stripe_secret_key: data.stripe_secret_key,
-                updated_at: new Date().toISOString(),
-            });
+        console.error("Error updating Stripe keys:", error);
+        return { error: "Failed to update Stripe keys" };
     }
 
     revalidatePath("/dashboard/settings");
     return { success: true };
-}
-
-export async function uploadAvatar(formData: FormData) {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) return { error: "Unauthorized" };
-
-    const file = formData.get("avatar") as File;
-    if (!file) return { error: "No file provided" };
-
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${user.id}-${Math.random()}.${fileExt}`;
-    const filePath = `avatars/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(filePath, file);
-
-    if (uploadError) {
-        console.error("Upload error:", uploadError);
-        return { error: "Failed to upload avatar" };
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-        .from("avatars")
-        .getPublicUrl(filePath);
-
-    let { error: updateError } = await supabase
-        .from("stores")
-        .upsert({
-            id: user.id,
-            avatar_url: publicUrl,
-            updated_at: new Date().toISOString(),
-        });
-
-    if (updateError) {
-        await supabase
-            .from("profiles")
-            .upsert({
-                id: user.id,
-                avatar_url: publicUrl,
-                updated_at: new Date().toISOString(),
-            });
-    }
-
-    revalidatePath("/dashboard/settings");
-    revalidatePath("/dashboard/store");
-    return { success: true, avatar_url: publicUrl };
-}
-
-export async function uploadSignature(formData: FormData) {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) return { error: "Unauthorized" };
-
-    const file = formData.get("signature") as File;
-    if (!file) return { error: "No file provided" };
-
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${user.id}-sig-${Math.random()}.${fileExt}`;
-    const filePath = `signatures/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(filePath, file);
-
-    if (uploadError) {
-        console.error("Upload error:", uploadError);
-        return { error: "Failed to upload signature" };
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-        .from("avatars")
-        .getPublicUrl(filePath);
-
-    let { error: updateError } = await supabase
-        .from("stores")
-        .upsert({
-            id: user.id,
-            signature_url: publicUrl,
-            updated_at: new Date().toISOString(),
-        });
-
-    if (updateError) {
-        await supabase
-            .from("profiles")
-            .upsert({
-                id: user.id,
-                signature_url: publicUrl,
-                updated_at: new Date().toISOString(),
-            });
-    }
-
-    revalidatePath("/dashboard/settings");
-    revalidatePath("/dashboard/store");
-    return { success: true, signature_url: publicUrl };
 }
 
 export async function deleteAccount() {
@@ -429,7 +313,7 @@ export async function deleteAccount() {
 
     if (!user) return { error: "Unauthorized" };
 
-    // 1. Delete transactions/bills/expenses/products
+    // 1. Delete associated data
     await supabase.from("bills").delete().eq("user_id", user.id);
     await supabase.from("expenses").delete().eq("user_id", user.id);
     await supabase.from("products").delete().eq("user_id", user.id);
@@ -437,11 +321,10 @@ export async function deleteAccount() {
     await supabase.from("suppliers").delete().eq("user_id", user.id);
     await supabase.from("purchase_orders").delete().eq("user_id", user.id);
     await supabase.from("branchs").delete().eq("store_id", user.id);
-    await supabase.from("locations").delete().eq("user_id", user.id);
 
-    // 2. Delete Store / Profile
-    await supabase.from("stores").delete().eq("id", user.id);
-    await supabase.from("profiles").delete().eq("id", user.id);
+    // 2. Delete Store and User record
+    await supabase.from("stores").delete().eq("owner_id", user.id);
+    await supabase.from("users").delete().eq("id", user.id);
 
     // 3. Sign out session
     await supabase.auth.signOut();
