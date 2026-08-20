@@ -41,11 +41,21 @@ export async function getBills(storeId?: string) {
         return [];
     }
 
-    return bills.map((b: any) => ({
-        ...b,
-        customer_name: b.customer?.name || "Guest",
-        items: b.items || [],
-    })) as Bill[];
+    return bills.map((b: any) => {
+        let displayStatus = b.status;
+        if (b.status === "draft") {
+            const hasQuoteTag = b.adjustments?.some((a: any) => a.label === "__is_quotation__");
+            if (hasQuoteTag) {
+                displayStatus = "quotation";
+            }
+        }
+        return {
+            ...b,
+            status: displayStatus,
+            customer_name: b.customer?.name || "Guest",
+            items: b.items || [],
+        };
+    }) as Bill[];
 }
 
 export async function getBill(id: string) {
@@ -81,8 +91,17 @@ export async function getBill(id: string) {
         if (customer) customer_name = customer.name;
     }
 
+    let displayStatus = bill.status;
+    if (bill.status === "draft") {
+        const hasQuoteTag = bill.adjustments?.some((a: any) => a.label === "__is_quotation__");
+        if (hasQuoteTag) {
+            displayStatus = "quotation";
+        }
+    }
+
     return {
         ...bill,
+        status: displayStatus,
         customer_name,
         items: bill.items || [],
     };
@@ -138,6 +157,7 @@ export async function createBill(data: {
     let total_amount = subtotal;
     if (data.adjustments && data.adjustments.length > 0) {
         for (const adj of data.adjustments) {
+            if (adj.label === "__is_quotation__") continue;
             if (adj.type === 'percent') {
                 total_amount += (subtotal * adj.value) / 100;
             } else {
@@ -147,14 +167,21 @@ export async function createBill(data: {
     }
     total_amount = Math.max(0, Math.round(total_amount * 100) / 100);
 
-    // 1. Create bill strictly with verified columns
-    const billPayload: any = {
+    const isQuotation = data.status === "quotation";
+    const finalAdjustments = [...(data.adjustments || [])];
+    if (isQuotation) {
+        finalAdjustments.push({ label: "__is_quotation__", type: "fixed", value: 0 });
+    }
+
+    // 1. Try inserting directly with status "quotation" or "draft"
+    let dbStatus = isQuotation ? "quotation" : (data.status || "draft");
+    let billPayload: any = {
         store_id: targetStoreId,
         customer_id: data.customer_id,
         total_amount,
         note: data.note || null,
-        status: data.status || "quotation",
-        adjustments: data.adjustments || [],
+        status: dbStatus,
+        adjustments: finalAdjustments,
         payment_terms: data.payment_terms || 0,
         validity_days: data.validity_days || 7,
     };
@@ -164,6 +191,14 @@ export async function createBill(data: {
         .insert(billPayload)
         .select()
         .single();
+
+    // Fallback: If DB check constraint only accepts ('draft', 'paid', 'cancelled')
+    if (billError && (billError.message?.includes("bills_status_check") || billError.code === "23514")) {
+        billPayload.status = "draft";
+        const retryRes = await supabase.from("bills").insert(billPayload).select().single();
+        bill = retryRes.data;
+        billError = retryRes.error;
+    }
 
     if (billError || !bill) {
         console.error("Error creating bill:", billError);
@@ -224,13 +259,22 @@ export async function updateBillStatus(id: string, status: "quotation" | "draft"
     const validStores = await getStores();
     const validStoreIds = validStores.map(s => s.id);
 
-    const { data: existing } = await supabase.from("bills").select("store_id").eq("id", id).single();
+    const { data: existing } = await supabase.from("bills").select("store_id, adjustments").eq("id", id).single();
     if (!existing || !validStoreIds.includes(existing.store_id)) {
         return { error: "Access denied" };
     }
 
+    let nextAdjustments = (existing.adjustments || []).filter((a: any) => a.label !== "__is_quotation__");
+    let dbStatus = status;
+
+    if (status === "quotation") {
+        nextAdjustments.push({ label: "__is_quotation__", type: "fixed", value: 0 });
+        dbStatus = "draft";
+    }
+
     const updatePayload: any = {
-        status,
+        status: dbStatus === "quotation" ? "draft" : dbStatus,
+        adjustments: nextAdjustments,
     };
 
     // When transitioning to draft (ใบแจ้งหนี้), update created_at to current timestamp
@@ -238,10 +282,17 @@ export async function updateBillStatus(id: string, status: "quotation" | "draft"
         updatePayload.created_at = new Date().toISOString();
     }
 
-    const { error } = await supabase
+    let { error } = await supabase
         .from("bills")
         .update(updatePayload)
         .eq("id", id);
+
+    // If direct status failed constraint, fallback to draft with tag
+    if (error && (error.message?.includes("bills_status_check") || error.code === "23514")) {
+        updatePayload.status = status === "paid" ? "paid" : status === "cancelled" ? "cancelled" : "draft";
+        const retryRes = await supabase.from("bills").update(updatePayload).eq("id", id);
+        error = retryRes.error;
+    }
 
     if (error) {
         console.error("Error updating bill status:", error);
