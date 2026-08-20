@@ -17,6 +17,8 @@ import {
 } from "lucide-react"
 import { useTranslation } from "@/lib/i18n/provider"
 import { MateFlowLogo } from "@/components/brand/mateflow-logo"
+import { StoreBranchDropdown } from "@/components/dashboard/store-branch-dropdown"
+import { Location } from "@/types"
 
 const sidebarItems = [
     {
@@ -66,16 +68,30 @@ const sidebarItems = [
     },
 ]
 
-export function Sidebar({ userRole = "owner" }: { userRole?: "owner" | "admin" | "sales" }) {
+interface SidebarProps {
+    userRole?: "owner" | "admin" | "sales";
+    storeName?: string;
+    locations?: Location[];
+}
+
+export function Sidebar({ userRole = "owner", storeName, locations = [] }: SidebarProps) {
     const pathname = usePathname()
     const { t } = useTranslation()
 
     return (
         <aside className="hidden border-r border-border bg-sidebar md:flex md:w-60 md:flex-col md:fixed md:inset-y-0 print:hidden z-40">
             <div className="flex flex-col flex-grow pt-4 overflow-y-auto">
-                {/* Brand Header - Clean & Professional */}
-                <div className="flex items-center px-4 mb-6">
-                    <MateFlowLogo size={30} />
+                {/* Brand Header */}
+                <div className="flex items-center px-4 mb-3">
+                    <MateFlowLogo size={28} />
+                </div>
+
+                {/* Store & Branch Selector in Sidebar */}
+                <div className="px-3 mb-4">
+                    <StoreBranchDropdown
+                        storeName={storeName}
+                        locations={locations}
+                    />
                 </div>
 
                 {/* Navigation Section */}
