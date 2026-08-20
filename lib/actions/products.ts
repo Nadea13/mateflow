@@ -28,38 +28,29 @@ export async function getProducts(storeId?: string) {
         `);
 
     if (targetStoreId) {
-        query = query.or(`store_id.eq.${targetStoreId},user_id.eq.${user.id}`);
-    } else {
-        query = query.eq("user_id", user.id);
+        query = query.eq("store_id", targetStoreId);
+    } else if (validStoreIds.length > 0) {
+        query = query.in("store_id", validStoreIds);
     }
 
     let { data: products, error } = await query.order("name", { ascending: true });
 
-    // Fallback: If no products found under specific store_id, fetch all products belonging to the user
-    if (!products || products.length === 0) {
-        const { data: userProducts } = await supabase
-            .from("products")
-            .select(`
-                *,
-                variants:product_variants(*),
-                supplier:suppliers(name)
-            `)
-            .eq("user_id", user.id)
-            .order("name", { ascending: true });
-
-        if (userProducts && userProducts.length > 0) {
-            products = userProducts;
-        } else {
-            // General fallback
-            const { data: allProds } = await supabase
+    if (error || !products || products.length === 0) {
+        // Fallback: If no products found under specific store, fetch from all user stores
+        if (validStoreIds.length > 0) {
+            const { data: storeProds } = await supabase
                 .from("products")
                 .select(`
                     *,
                     variants:product_variants(*),
                     supplier:suppliers(name)
                 `)
+                .in("store_id", validStoreIds)
                 .order("name", { ascending: true });
-            products = allProds || [];
+
+            if (storeProds && storeProds.length > 0) {
+                products = storeProds;
+            }
         }
     }
 
@@ -83,24 +74,33 @@ export async function createProduct(data: Partial<Product>) {
     const validStores = await getStores();
     const validStoreIds = validStores.map(s => s.id);
 
+    if (validStoreIds.length === 0) {
+        return { error: "No active store found. Please create a store first." };
+    }
+
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
-    let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]) || null;
+    let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return { error: "Invalid store access" };
+    }
 
     const costPrice = Number(data.cost_price) || 0;
     const initialStock = Number(data.stock) || 0;
 
     const payload: any = {
-        ...data,
-        updated_at: new Date().toISOString(),
-        price: Number(data.price),
+        name: data.name,
+        sku: data.sku || null,
+        barcode: data.barcode || null,
+        price: Number(data.price) || 0,
         cost_price: costPrice,
         stock: initialStock,
-        user_id: user.id,
+        image_url: data.image_url || null,
+        min_stock_level: Number(data.min_stock_level) || 0,
+        supplier_id: data.supplier_id || null,
+        store_id: targetStoreId,
+        updated_at: new Date().toISOString(),
     };
-
-    if (targetStoreId) {
-        payload.store_id = targetStoreId;
-    }
 
     let { data: createdProduct, error } = await supabase
         .from("products")
@@ -129,8 +129,7 @@ export async function createProduct(data: Partial<Product>) {
         }
 
         const expensePayload: any = {
-            store_id: targetStoreId || null,
-            user_id: user.id,
+            store_id: targetStoreId,
             title: `ต้นทุนสินค้า: ${data.name || "สินค้าใหม่"} (จำนวน ${initialStock.toLocaleString()} ชิ้น @ ฿${costPrice.toLocaleString()})`,
             category: "cogs", // Cost of Goods Sold
             amount: totalCostAmount,
@@ -168,6 +167,15 @@ export async function updateProduct(id: string, data: Partial<Product>) {
 
     if (!user) return { error: "Unauthorized" };
 
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    // Verify ownership of the product
+    const { data: existing } = await supabase.from("products").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
+
     const payload = {
         ...data,
         updated_at: new Date().toISOString(),
@@ -199,6 +207,14 @@ export async function deleteProduct(id: string) {
 
     if (!user) return { error: "Unauthorized" };
 
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { data: existing } = await supabase.from("products").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
+
     const { error } = await supabase.from("products").delete().eq("id", id);
 
     if (error) {
@@ -218,7 +234,15 @@ export async function deleteProductByName(name: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Unauthorized" };
 
-    const { error } = await supabase.from("products").delete().ilike("name", `%${name}%`);
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { error } = await supabase
+        .from("products")
+        .delete()
+        .in("store_id", validStoreIds)
+        .ilike("name", `%${name}%`);
+
     if (error) return { error: error.message };
     revalidatePath("/dashboard/catalog");
     return { success: true };
@@ -230,7 +254,15 @@ export async function updateProductByName(name: string, data: Partial<Product>) 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Unauthorized" };
 
-    const { error } = await supabase.from("products").update(data).ilike("name", `%${name}%`);
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { error } = await supabase
+        .from("products")
+        .update(data)
+        .in("store_id", validStoreIds)
+        .ilike("name", `%${name}%`);
+
     if (error) return { error: error.message };
     revalidatePath("/dashboard/catalog");
     return { success: true };
