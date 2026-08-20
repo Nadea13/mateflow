@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Supplier } from "@/types";
+import { getStores } from "@/lib/actions/profile";
 
 export async function getSuppliers(storeId?: string) {
     const cookieStore = await cookies();
@@ -12,22 +13,24 @@ export async function getSuppliers(storeId?: string) {
 
     if (!user) return [];
 
-    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
 
-    let query = supabase.from("suppliers").select("*").order("name", { ascending: true });
+    if (validStoreIds.length === 0) return [];
 
-    if (targetStoreId) {
-        query = query.eq("store_id", targetStoreId);
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = storeId || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return [];
     }
+
+    let query = supabase.from("suppliers").select("*").eq("store_id", targetStoreId).order("name", { ascending: true });
 
     let { data: suppliers, error } = await query;
 
     if (error || !suppliers) {
-        const fallback = await supabase
-            .from("suppliers")
-            .select("*")
-            .order("name", { ascending: true });
-        suppliers = fallback.data || [];
+        return [];
     }
 
     return suppliers as Supplier[];
@@ -48,19 +51,22 @@ export async function createSupplier(data: {
         return { error: "Unauthorized" };
     }
 
-    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
-    if (!targetStoreId) {
-        const { data: defaultStore } = await supabase
-            .from("stores")
-            .select("id")
-            .eq("owner_id", user.id)
-            .order("created_at", { ascending: true })
-            .maybeSingle();
-        if (defaultStore) targetStoreId = defaultStore.id;
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    if (validStoreIds.length === 0) {
+        return { error: "No active store found" };
+    }
+
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
+
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
+        return { error: "Invalid store access" };
     }
 
     const payload: any = {
-        store_id: targetStoreId || user.id,
+        store_id: targetStoreId,
         ...data,
     };
 
@@ -70,26 +76,30 @@ export async function createSupplier(data: {
         .select()
         .single();
 
-    if (error && (error.code === "PGRST204" || error.message?.includes("store_id"))) {
-        delete payload.store_id;
-        payload.user_id = user.id;
-        const fallbackRes = await supabase.from("suppliers").insert(payload).select().single();
-        supplier = fallbackRes.data;
-        error = fallbackRes.error;
-    }
-
     if (error) {
         console.error("Error creating supplier:", error);
-        return { error: "Failed to create supplier" };
+        return { error: error.message || "Failed to create supplier" };
     }
 
-    revalidatePath("/dashboard/expenses");
+    revalidatePath("/dashboard/catalog", "page");
+    revalidatePath("/dashboard/expenses", "page");
     return { success: true, supplier: supplier as Supplier };
 }
 
 export async function updateSupplier(id: string, data: Partial<Supplier>) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { data: existing } = await supabase.from("suppliers").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
 
     const { error } = await supabase
         .from("suppliers")
@@ -104,13 +114,25 @@ export async function updateSupplier(id: string, data: Partial<Supplier>) {
         return { error: "Failed to update supplier" };
     }
 
-    revalidatePath("/dashboard/expenses");
+    revalidatePath("/dashboard/catalog", "page");
+    revalidatePath("/dashboard/expenses", "page");
     return { success: true };
 }
 
 export async function deleteSupplier(id: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Unauthorized" };
+
+    const validStores = await getStores();
+    const validStoreIds = validStores.map(s => s.id);
+
+    const { data: existing } = await supabase.from("suppliers").select("store_id").eq("id", id).single();
+    if (!existing || !validStoreIds.includes(existing.store_id)) {
+        return { error: "Access denied" };
+    }
 
     const { error } = await supabase
         .from("suppliers")
@@ -122,6 +144,7 @@ export async function deleteSupplier(id: string) {
         return { error: "Failed to delete supplier" };
     }
 
-    revalidatePath("/dashboard/expenses");
+    revalidatePath("/dashboard/catalog", "page");
+    revalidatePath("/dashboard/expenses", "page");
     return { success: true };
 }
