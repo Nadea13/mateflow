@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createNewStore } from "@/lib/actions/profile";
 import { ImageUploadZone } from "@/components/ui/image-upload-zone";
 import { toast } from "sonner";
-import { Store, Loader2, Upload, X } from "lucide-react";
+import { Store, Loader2, Upload, X, Building2, ChevronDown, ChevronUp } from "lucide-react";
 
 interface CreateStoreDialogProps {
     open: boolean;
@@ -23,6 +24,14 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
     const [storeAddress, setStoreAddress] = useState("");
     const [avatarUrl, setAvatarUrl] = useState("");
     const [signatureUrl, setSignatureUrl] = useState("");
+
+    // Initial Branch Fields
+    const [branchName, setBranchName] = useState("");
+    const [branchCode, setBranchCode] = useState("HQ-01");
+    const [branchType, setBranchType] = useState<"warehouse" | "storefront" | "3pl" | "other">("warehouse");
+    const [branchAddress, setBranchAddress] = useState("");
+    const [showBranchDetails, setShowBranchDetails] = useState(false);
+
     const [loading, setLoading] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const logoInputRef = useRef<HTMLInputElement>(null);
@@ -78,7 +87,6 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
 
         setLoading(true);
         try {
-            // Always call createNewStore to ensure a brand-new distinct store row is inserted
             const res = await createNewStore({
                 store_name: storeName.trim(),
                 store_phone: storePhone.trim(),
@@ -86,10 +94,14 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                 store_address: storeAddress.trim(),
                 avatar_url: avatarUrl || undefined,
                 signature_url: signatureUrl || undefined,
+                branch_name: branchName.trim() || undefined,
+                branch_code: branchCode.trim() || undefined,
+                branch_type: branchType,
+                branch_address: branchAddress.trim() || undefined,
             }) as any;
 
             if (res?.success) {
-                toast.success("สร้างร้านค้าใหม่เรียบร้อยแล้ว!");
+                toast.success("สร้างร้านค้าและสาขาเริ่มต้นเรียบร้อยแล้ว!");
                 setOpen(false);
                 // Reset form fields
                 setStoreName("");
@@ -98,6 +110,9 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                 setStoreAddress("");
                 setAvatarUrl("");
                 setSignatureUrl("");
+                setBranchName("");
+                setBranchCode("HQ-01");
+                setBranchAddress("");
                 window.location.reload();
             } else {
                 toast.error(res?.error || "Failed to create store");
@@ -112,7 +127,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     {/* Header without underline border */}
                     <DialogHeader className="pb-1">
@@ -125,7 +140,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                     สร้างร้านค้าใหม่
                                 </DialogTitle>
                                 <DialogDescription className="text-xs text-muted-foreground">
-                                    ตั้งค่าข้อมูลร้านค้าของคุณสำหรับออกบิลและจัดการสต็อกสินค้า
+                                    ตั้งค่าข้อมูลร้านค้าและสาขาเริ่มต้นของคุณสำหรับออกบิลและจัดการสต็อก
                                 </DialogDescription>
                             </div>
                         </div>
@@ -191,65 +206,157 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             </div>
                         </div>
 
-                        {/* Store Name & Phone */}
-                        <div className="space-y-1.5">
-                            <Label htmlFor="store-name" className="text-xs font-semibold">
-                                ชื่อร้านค้า *
-                            </Label>
-                            <Input
-                                id="store-name"
-                                value={storeName}
-                                onChange={(e) => setStoreName(e.target.value)}
-                                placeholder="เช่น Mateflow Flagship Store"
-                                required
-                                className="h-9 text-xs"
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Section 1: Store Information */}
+                        <div className="space-y-3">
                             <div className="space-y-1.5">
-                                <Label htmlFor="store-phone" className="text-xs font-semibold">
-                                    เบอร์โทรศัพท์ร้าน
+                                <Label htmlFor="store-name" className="text-xs font-semibold">
+                                    ชื่อร้านค้า *
                                 </Label>
                                 <Input
-                                    id="store-phone"
-                                    value={storePhone}
-                                    onChange={(e) => setStorePhone(e.target.value)}
-                                    placeholder="08X-XXX-XXXX"
+                                    id="store-name"
+                                    value={storeName}
+                                    onChange={(e) => {
+                                        setStoreName(e.target.value);
+                                        if (!branchName) {
+                                            // auto suggest branch name if empty
+                                        }
+                                    }}
+                                    placeholder="เช่น Mateflow Flagship Store"
+                                    required
                                     className="h-9 text-xs"
                                 />
                             </div>
 
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="store-phone" className="text-xs font-semibold">
+                                        เบอร์โทรศัพท์ร้าน
+                                    </Label>
+                                    <Input
+                                        id="store-phone"
+                                        value={storePhone}
+                                        onChange={(e) => setStorePhone(e.target.value)}
+                                        placeholder="08X-XXX-XXXX"
+                                        className="h-9 text-xs"
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="tax-id" className="text-xs font-semibold">
+                                        เลขประจำตัวผู้เสียภาษี
+                                    </Label>
+                                    <Input
+                                        id="tax-id"
+                                        value={taxId}
+                                        onChange={(e) => setTaxId(e.target.value)}
+                                        placeholder="เลข 13 หลัก"
+                                        maxLength={13}
+                                        className="h-9 text-xs font-mono"
+                                    />
+                                </div>
+                            </div>
+
                             <div className="space-y-1.5">
-                                <Label htmlFor="tax-id" className="text-xs font-semibold">
-                                    เลขประจำตัวผู้เสียภาษี
+                                <Label htmlFor="store-address" className="text-xs font-semibold">
+                                    ที่อยู่ร้านค้า / สำนักงานใหญ่
                                 </Label>
-                                <Input
-                                    id="tax-id"
-                                    value={taxId}
-                                    onChange={(e) => setTaxId(e.target.value)}
-                                    placeholder="เลข 13 หลัก"
-                                    maxLength={13}
-                                    className="h-9 text-xs font-mono"
+                                <Textarea
+                                    id="store-address"
+                                    value={storeAddress}
+                                    onChange={(e) => setStoreAddress(e.target.value)}
+                                    placeholder="ที่อยู่สำหรับแสดงบนหัวใบเสร็จรับเงิน..."
+                                    className="text-xs min-h-[55px]"
                                 />
                             </div>
                         </div>
 
-                        {/* Address */}
-                        <div className="space-y-1.5">
-                            <Label htmlFor="store-address" className="text-xs font-semibold">
-                                ที่อยู่ร้านค้า
-                            </Label>
-                            <Textarea
-                                id="store-address"
-                                value={storeAddress}
-                                onChange={(e) => setStoreAddress(e.target.value)}
-                                placeholder="ที่อยู่สำหรับแสดงบนหัวใบเสร็จรับเงิน..."
-                                className="text-xs min-h-[60px]"
-                            />
+                        {/* Section 2: Initial Branch (สาขาเริ่มต้น) */}
+                        <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1 rounded-md bg-primary/20 text-primary">
+                                        <Building2 className="h-3.5 w-3.5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-foreground">สาขาเริ่มต้นของร้านนี้</h4>
+                                        <p className="text-[10px] text-muted-foreground">สำหรับใช้เป็นคลังสต็อกและหน้าร้านแรก</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowBranchDetails(!showBranchDetails)}
+                                    className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                                >
+                                    {showBranchDetails ? "ย่อลง" : "กำหนดเอง"}
+                                    {showBranchDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                </button>
+                            </div>
+
+                            <div className="space-y-2.5">
+                                <div className="space-y-1">
+                                    <Label htmlFor="branch-name" className="text-[11px] font-semibold text-foreground">
+                                        ชื่อสาขาแรก
+                                    </Label>
+                                    <Input
+                                        id="branch-name"
+                                        value={branchName}
+                                        onChange={(e) => setBranchName(e.target.value)}
+                                        placeholder={storeName ? `${storeName} (สาขาหลัก)` : "สาขาหลัก (Headquarters)"}
+                                        className="h-8 text-xs bg-background"
+                                    />
+                                </div>
+
+                                {showBranchDetails && (
+                                    <div className="space-y-2.5 pt-1 border-t border-primary/10">
+                                        <div className="grid grid-cols-2 gap-2.5">
+                                            <div className="space-y-1">
+                                                <Label htmlFor="branch-code" className="text-[11px] font-semibold">
+                                                    รหัสสาขา (Code)
+                                                </Label>
+                                                <Input
+                                                    id="branch-code"
+                                                    value={branchCode}
+                                                    onChange={(e) => setBranchCode(e.target.value)}
+                                                    placeholder="HQ-01"
+                                                    className="h-8 text-xs bg-background"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[11px] font-semibold">
+                                                    ประเภท
+                                                </Label>
+                                                <Select value={branchType} onValueChange={(val: any) => setBranchType(val)}>
+                                                    <SelectTrigger className="h-8 text-xs bg-background">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="warehouse">คลังสินค้าหลัก (Warehouse)</SelectItem>
+                                                        <SelectItem value="storefront">หน้าร้าน (Storefront)</SelectItem>
+                                                        <SelectItem value="3pl">3PL / FBA</SelectItem>
+                                                        <SelectItem value="other">อื่นๆ (Other)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <Label htmlFor="branch-address" className="text-[11px] font-semibold">
+                                                ที่อยู่สาขา (เว้นว่างเพื่อใช้ที่อยู่เดียวกับร้าน)
+                                            </Label>
+                                            <Input
+                                                id="branch-address"
+                                                value={branchAddress}
+                                                onChange={(e) => setBranchAddress(e.target.value)}
+                                                placeholder="ที่ตั้งคลัง / หน้าร้านสาขา..."
+                                                className="h-8 text-xs bg-background"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
-                        {/* Authorized Signature Upload Dropzone */}
+                        {/* Section 3: Authorized Signature Upload Dropzone */}
                         <div className="space-y-1.5 border-t border-border/60 pt-3">
                             <Label className="text-xs font-semibold block mb-1">
                                 ลายเซ็นต์ผู้มีอำนาจ
@@ -284,7 +391,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground cursor-pointer"
                         >
                             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                            สร้างร้านค้า
+                            สร้างร้านค้าและสาขา
                         </Button>
                     </DialogFooter>
                 </form>

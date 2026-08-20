@@ -178,6 +178,10 @@ export async function createNewStore(data: {
     store_address?: string;
     avatar_url?: string;
     signature_url?: string;
+    branch_name?: string;
+    branch_code?: string;
+    branch_type?: "warehouse" | "storefront" | "3pl" | "other";
+    branch_address?: string;
 }) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
@@ -187,7 +191,7 @@ export async function createNewStore(data: {
         return { error: "User session expired. Please sign in again." };
     }
 
-    // Always insert a BRAND NEW store row
+    // 1. Always insert a BRAND NEW store row
     const storePayload: any = {
         owner_id: user.id,
         store_name: data.store_name,
@@ -214,22 +218,26 @@ export async function createNewStore(data: {
         return { error: error.message || "Failed to create new store" };
     }
 
-    // Auto-create HQ branch for this brand new store
+    // 2. Create the initial branch for this brand new store
     try {
-        const branchName = `${data.store_name} (สาขาหลัก)`;
+        const finalBranchName = data.branch_name?.trim() || `${data.store_name} (สาขาหลัก)`;
+        const finalBranchCode = data.branch_code?.trim() || "HQ-01";
+        const finalBranchType = data.branch_type || "warehouse";
+        const finalBranchAddress = data.branch_address?.trim() || data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก";
+
         await supabase.from("branchs").insert({
             store_id: newStore.id,
-            name: branchName,
-            code: "HQ-01",
-            type: "warehouse",
+            name: finalBranchName,
+            code: finalBranchCode,
+            type: finalBranchType,
             country: "TH",
-            address: data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก",
+            address: finalBranchAddress,
         });
     } catch (locErr) {
         console.warn("Auto-branch creation warning:", locErr);
     }
 
-    // Automatically set this newly created store as active
+    // 3. Automatically set this newly created store as active
     cookieStore.set("active_store_id", newStore.id, {
         path: "/",
         maxAge: 60 * 60 * 24 * 365,
