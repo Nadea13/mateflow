@@ -24,13 +24,23 @@ export async function getUserProfile() {
     const validStores = await getStores();
     const store = validStores[0] || null;
 
+    // Default to 'owner' so owners never lose settings/store/billing menus
+    let resolvedRole = "owner";
+    if (store) {
+        if (store.user_role) {
+            resolvedRole = store.user_role;
+        } else if (store.owner_id === user.id) {
+            resolvedRole = "owner";
+        }
+    }
+
     return {
         id: user.id,
         email: user.email || dbUser?.email || "",
         store_name: store?.store_name || "",
         avatar_url: store?.avatar_url || dbUser?.avatar_url || "",
         owner_id: store?.owner_id || user.id,
-        role: store?.user_role || (store?.owner_id === user.id ? "owner" : "sales"),
+        role: resolvedRole,
         default_currency: store?.default_currency || "THB",
         country: store?.country || "TH",
         tax_rate: store?.tax_rate || 7,
@@ -69,39 +79,17 @@ export async function getStoreProfile(storeId?: string) {
     if (!user) return null;
 
     const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
+    if (validStores.length === 0) return null;
 
-    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
-    let store: any = null;
+    const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
+    const targetStoreId = storeId || (activeCookieStoreId && validStores.some(s => s.id === activeCookieStoreId) ? activeCookieStoreId : validStores[0].id);
 
-    if (targetStoreId && validStoreIds.includes(targetStoreId)) {
-        store = validStores.find(s => s.id === targetStoreId);
-    } else if (validStores.length > 0) {
-        store = validStores[0];
-    }
-
-    // Fallback: If user has no store at all, provide an in-memory default store so page never crashes/redirects
-    if (!store) {
-        return {
-            id: user.id,
-            owner_id: user.id,
-            store_name: "ร้านค้าของฉัน",
-            avatar_url: "",
-            store_address: "",
-            tax_id: "",
-            signature_url: "",
-            store_phone: "",
-            role: "owner",
-            etax_enabled: false,
-            etax_api_key: "",
-            etax_company_id: "",
-        };
-    }
+    const store = validStores.find(s => s.id === targetStoreId) || validStores[0];
 
     return {
         id: store.id,
         owner_id: store.owner_id || user.id,
-        store_name: store.store_name || "ร้านค้าของฉัน",
+        store_name: store.store_name || "",
         avatar_url: store.avatar_url || "",
         store_address: store.store_address || "",
         tax_id: store.tax_id || "",
@@ -121,17 +109,6 @@ export async function getProfile(storeId?: string) {
 
 export async function switchActiveStore(storeId: string) {
     const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) return { error: "Unauthorized" };
-
-    // Verify user owns or is member of this store
-    const validStores = await getStores();
-    if (!validStores.some(s => s.id === storeId)) {
-        return { error: "Access denied to target store" };
-    }
-
     cookieStore.set("active_store_id", storeId, {
         path: "/",
         maxAge: 60 * 60 * 24 * 365, // 1 year
@@ -154,56 +131,31 @@ export async function getStores() {
 
     if (!user) return [];
 
-    // 1. Stores owned by user (with branches)
-    const { data: ownedStores } = await supabase
+    // 1. Fetch stores owned by this user
+    const { data: ownedStores, error: ownedErr } = await supabase
         .from("stores")
-        .select(`
-            *,
-            branchs:branchs ( id, name, code, type, address )
-        `)
+        .select("*")
         .eq("owner_id", user.id)
         .order("created_at", { ascending: true });
 
-    // 2. Stores where user is a team member (wrapped in safe try-catch in case table is fresh)
-    let memberRows: any[] = [];
+    let allStores: any[] = (ownedStores || []).map(s => ({ ...s, user_role: "owner" }));
+
+    // 2. Fetch stores where this user is an invited team member
     try {
-        const { data: members } = await supabase
+        const { data: teamMemberships } = await supabase
             .from("store_team_members")
-            .select("role, store_id")
+            .select("store_id, role, store:stores(*)")
             .eq("user_id", user.id);
-        if (members) memberRows = members;
-    } catch (e) {
-        console.warn("store_team_members query warning:", e);
-    }
 
-    const allStores: any[] = (ownedStores || []).map(s => ({
-        ...s,
-        user_role: "owner",
-        branches: s.branchs || [],
-    }));
-
-    if (memberRows && memberRows.length > 0) {
-        for (const mr of memberRows) {
-            if (!allStores.some(s => s.id === mr.store_id)) {
-                // Fetch store details with branches
-                const { data: storeDetails } = await supabase
-                    .from("stores")
-                    .select(`
-                        *,
-                        branchs:branchs ( id, name, code, type, address )
-                    `)
-                    .eq("id", mr.store_id)
-                    .maybeSingle();
-
-                if (storeDetails) {
-                    allStores.push({
-                        ...storeDetails,
-                        user_role: mr.role,
-                        branches: storeDetails.branchs || [],
-                    });
+        if (teamMemberships && teamMemberships.length > 0) {
+            teamMemberships.forEach((tm: any) => {
+                if (tm.store && !allStores.some(s => s.id === tm.store.id)) {
+                    allStores.push({ ...tm.store, user_role: tm.role || "sales" });
                 }
-            }
+            });
         }
+    } catch (e) {
+        // Ignored if table not created yet
     }
 
     return allStores;
@@ -229,6 +181,7 @@ export async function createNewStore(data: {
         return { error: "User session expired. Please sign in again." };
     }
 
+    // 1. Always insert a BRAND NEW store row
     const storePayload: any = {
         owner_id: user.id,
         store_name: data.store_name,
@@ -255,7 +208,7 @@ export async function createNewStore(data: {
         return { error: error.message || "Failed to create new store" };
     }
 
-    // Create the initial branch for this store
+    // 2. Create the initial branch for this brand new store
     const finalBranchName = data.branch_name?.trim() || `${data.store_name} (สาขาหลัก)`;
     const finalBranchCode = data.branch_code?.trim() || "HQ-01";
     const finalBranchType = data.branch_type || "warehouse";
@@ -270,13 +223,12 @@ export async function createNewStore(data: {
         address: finalBranchAddress,
     };
 
-    try {
-        await supabase.from("branchs").insert(branchPayload);
-    } catch (bErr) {
-        console.warn("Error inserting initial branch:", bErr);
+    let branchRes = await supabase.from("branchs").insert(branchPayload);
+    if (branchRes.error) {
+        console.warn("Branch insertion warning:", branchRes.error);
     }
 
-    // Automatically set this newly created store as active in cookie
+    // 3. Automatically set this newly created store as active in cookie
     cookieStore.set("active_store_id", newStore.id, {
         path: "/",
         maxAge: 60 * 60 * 24 * 365,
@@ -311,13 +263,9 @@ export async function updateProfile(data: {
     const validStores = await getStores();
     const validStoreIds = validStores.map(s => s.id);
 
-    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
-    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
-        targetStoreId = validStoreIds[0];
-    }
+    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value || validStoreIds[0];
 
-    // If no store exists in DB yet, create one
-    if (!targetStoreId) {
+    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
         return createNewStore({
             store_name: data.store_name || "My Store",
             store_phone: data.store_phone,
@@ -328,6 +276,7 @@ export async function updateProfile(data: {
         });
     }
 
+    // Update existing store
     const updatePayload: any = {
         updated_at: new Date().toISOString(),
     };
@@ -363,20 +312,17 @@ export async function getTeamMembers() {
 
     if (!user) return [];
 
-    try {
-        const { data, error } = await supabase
-            .from("team_members")
-            .select("*")
-            .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+        .from("team_members")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-        if (error) {
-            return [];
-        }
-
-        return data || [];
-    } catch {
+    if (error) {
+        console.error("Error fetching team members:", error);
         return [];
     }
+
+    return data || [];
 }
 
 export async function signOutUser() {
@@ -397,19 +343,22 @@ export async function updateETaxSettings(data: { etax_enabled: boolean; etax_api
 
     if (!user) return { error: "Unauthorized" };
 
-    const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
     const activeStoreId = cookieStore.get("active_store_id")?.value;
-    const targetStoreId = activeStoreId && validStoreIds.includes(activeStoreId) ? activeStoreId : validStoreIds[0];
 
-    if (!targetStoreId) return { error: "Store not found" };
-
-    const { error } = await supabase.from("stores").update({
+    let query = supabase.from("stores").update({
         etax_enabled: data.etax_enabled,
         etax_api_key: data.etax_api_key,
         etax_company_id: data.etax_company_id,
         updated_at: new Date().toISOString(),
-    }).eq("id", targetStoreId);
+    });
+
+    if (activeStoreId) {
+        query = query.eq("id", activeStoreId);
+    } else {
+        query = query.eq("owner_id", user.id);
+    }
+
+    const { error } = await query;
 
     if (error) {
         console.error("Error updating E-Tax settings:", error);
@@ -427,18 +376,21 @@ export async function updateStripeKeys(data: { stripe_publishable_key?: string; 
 
     if (!user) return { error: "Unauthorized" };
 
-    const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
     const activeStoreId = cookieStore.get("active_store_id")?.value;
-    const targetStoreId = activeStoreId && validStoreIds.includes(activeStoreId) ? activeStoreId : validStoreIds[0];
 
-    if (!targetStoreId) return { error: "Store not found" };
-
-    const { error } = await supabase.from("stores").update({
+    let query = supabase.from("stores").update({
         stripe_publishable_key: data.stripe_publishable_key,
         stripe_secret_key: data.stripe_secret_key,
         updated_at: new Date().toISOString(),
-    }).eq("id", targetStoreId);
+    });
+
+    if (activeStoreId) {
+        query = query.eq("id", activeStoreId);
+    } else {
+        query = query.eq("owner_id", user.id);
+    }
+
+    const { error } = await query;
 
     if (error) {
         console.error("Error updating Stripe keys:", error);
@@ -456,23 +408,20 @@ export async function deleteAccount() {
 
     if (!user) return { error: "Unauthorized" };
 
-    const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
+    // 1. Delete associated data
+    await supabase.from("bills").delete().eq("store_id", user.id);
+    await supabase.from("expenses").delete().eq("store_id", user.id);
+    await supabase.from("products").delete().eq("store_id", user.id);
+    await supabase.from("customers").delete().eq("store_id", user.id);
+    await supabase.from("suppliers").delete().eq("store_id", user.id);
+    await supabase.from("purchase_orders").delete().eq("store_id", user.id);
+    await supabase.from("branchs").delete().eq("store_id", user.id);
 
-    if (validStoreIds.length > 0) {
-        for (const storeId of validStoreIds) {
-            await supabase.from("bills").delete().eq("store_id", storeId);
-            await supabase.from("expenses").delete().eq("store_id", storeId);
-            await supabase.from("products").delete().eq("store_id", storeId);
-            await supabase.from("customers").delete().eq("store_id", storeId);
-            await supabase.from("suppliers").delete().eq("store_id", storeId);
-            await supabase.from("purchase_orders").delete().eq("store_id", storeId);
-            await supabase.from("branchs").delete().eq("store_id", storeId);
-            await supabase.from("stores").delete().eq("id", storeId);
-        }
-    }
-
+    // 2. Delete Store and User record
+    await supabase.from("stores").delete().eq("owner_id", user.id);
     await supabase.from("users").delete().eq("id", user.id);
+
+    // 3. Sign out session
     await supabase.auth.signOut();
     redirect("/login");
 }

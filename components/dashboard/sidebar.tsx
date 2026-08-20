@@ -110,6 +110,7 @@ export function Sidebar({
                 <div className="flex flex-col flex-grow px-2">
                     <nav className="space-y-0.5">
                         {sidebarItems.map((item) => {
+                            // Only restrict sub-menus if specifically a restricted non-owner role
                             if (userRole === "sales" || userRole === "stock_keeper") {
                                 if (
                                     item.href === "/dashboard/settings" ||
