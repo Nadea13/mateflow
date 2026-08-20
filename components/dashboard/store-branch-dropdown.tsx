@@ -1,12 +1,13 @@
 ﻿"use client";
 
 import { useState } from "react";
-import { Store, Building2, ChevronDown, Plus, Check, Settings, ArrowLeftRight, CheckCircle2 } from "lucide-react";
+import { Store, Building2, ChevronDown, Plus, Check, Settings, ArrowLeftRight, CheckCircle2, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { LocationDialog } from "@/components/inventory/location-dialog";
 import { CreateStoreDialog } from "@/components/store/create-store-dialog";
+import { switchActiveStore } from "@/lib/actions/profile";
 import { Location } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -30,6 +31,7 @@ export function StoreBranchDropdown({
     const [addBranchOpen, setAddBranchOpen] = useState(false);
     const [createStoreOpen, setCreateStoreOpen] = useState(false);
     const [switchStoreOpen, setSwitchStoreOpen] = useState(false);
+    const [switchingStoreId, setSwitchingStoreId] = useState<string | null>(null);
     const [selectedBranchId, setSelectedBranchId] = useState<string>(locations[0]?.id || "main");
 
     const hasStore = !!storeName && storeName.trim().length > 0;
@@ -57,12 +59,23 @@ export function StoreBranchDropdown({
         );
     }
 
-    const handleSelectStore = (store: any) => {
-        setSwitchStoreOpen(false);
-        toast.success(`สลับไปที่ร้าน "${store.store_name}" เรียบร้อยแล้ว`);
-        // Navigate or refresh to load this store's scope
-        router.push(`/dashboard/store?storeId=${store.id}`);
-        router.refresh();
+    const handleSelectStore = async (store: any) => {
+        setSwitchingStoreId(store.id);
+        try {
+            const res = await switchActiveStore(store.id);
+            if (res.success) {
+                toast.success(`สลับไปที่ร้าน "${store.store_name}" เรียบร้อยแล้ว`);
+                setSwitchStoreOpen(false);
+                window.location.reload();
+            } else {
+                toast.error("Failed to switch store");
+            }
+        } catch (err: any) {
+            console.error("Switch store error:", err);
+            toast.error(err?.message || "Error switching store");
+        } finally {
+            setSwitchingStoreId(null);
+        }
     };
 
     return (
@@ -252,9 +265,11 @@ export function StoreBranchDropdown({
                         ) : (
                             stores.map((s) => {
                                 const isCurrent = (s.id === activeStoreId) || (s.store_name === storeName);
+                                const isSwitching = switchingStoreId === s.id;
                                 return (
                                     <button
                                         key={s.id}
+                                        disabled={isSwitching}
                                         onClick={() => handleSelectStore(s)}
                                         className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer ${
                                             isCurrent
@@ -275,11 +290,13 @@ export function StoreBranchDropdown({
                                                 <span className="text-[10px] text-muted-foreground truncate">{s.store_phone || s.store_address || "ร้านค้าของคุณ"}</span>
                                             </div>
                                         </div>
-                                        {isCurrent && (
-                                            <div className="flex items-center gap-1 text-[11px] font-semibold text-primary shrink-0">
-                                                <CheckCircle2 className="h-4 w-4" />
-                                            </div>
-                                        )}
+                                        <div className="shrink-0 flex items-center">
+                                            {isSwitching ? (
+                                                <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                                            ) : isCurrent ? (
+                                                <CheckCircle2 className="h-4 w-4 text-primary" />
+                                            ) : null}
+                                        </div>
                                     </button>
                                 );
                             })

@@ -5,27 +5,30 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Location, InventoryLevel } from "@/types";
 
-export async function getLocations() {
+export async function getLocations(storeId?: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // Query branchs table first, fallback to locations if schema not yet migrated
-    let { data: branchs, error } = await supabase
-        .from("branchs")
-        .select("*")
-        .order("created_at", { ascending: true });
+    if (!user) return [];
 
-    if (error) {
-        // Fallback for backward compatibility
-        const fallback = await supabase
-            .from("locations")
-            .select("*")
-            .order("created_at", { ascending: true });
-        branchs = fallback.data;
+    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+
+    let query = supabase.from("branchs").select("*").order("created_at", { ascending: true });
+
+    if (targetStoreId) {
+        query = query.eq("store_id", targetStoreId);
     }
 
-    if (!branchs) {
-        return [];
+    let { data: branchs, error } = await query;
+
+    if (error || !branchs || branchs.length === 0) {
+        // Fallback for backward compatibility or when store_id was not yet populated
+        const fallback = await supabase
+            .from("branchs")
+            .select("*")
+            .order("created_at", { ascending: true });
+        branchs = fallback.data || [];
     }
 
     return branchs.map((b: any) => ({
@@ -44,9 +47,11 @@ export async function createLocation(data: Partial<Location>) {
         return { error: "Unauthorized" };
     }
 
+    const targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value || user.id;
+
     const payload: any = {
         ...data,
-        store_id: user.id,
+        store_id: targetStoreId,
     };
 
     // Try inserting into branchs table with store_id

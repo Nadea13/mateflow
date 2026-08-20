@@ -21,13 +21,17 @@ export async function getUserProfile() {
         .eq("id", user.id)
         .maybeSingle();
 
-    // 2. Fetch associated store
-    let { data: store } = await supabase
-        .from("stores")
-        .select("*")
-        .eq("owner_id", user.id)
-        .order("created_at", { ascending: true })
-        .maybeSingle();
+    // 2. Read active store ID from cookie if set
+    const activeStoreIdCookie = cookieStore.get("active_store_id")?.value;
+
+    let storeQuery = supabase.from("stores").select("*");
+    if (activeStoreIdCookie) {
+        storeQuery = storeQuery.eq("id", activeStoreIdCookie);
+    } else {
+        storeQuery = storeQuery.eq("owner_id", user.id).order("created_at", { ascending: true });
+    }
+
+    let { data: store } = await storeQuery.maybeSingle();
 
     if (!store) {
         // Fallback query by id
@@ -83,9 +87,11 @@ export async function getStoreProfile(storeId?: string) {
 
     if (!user) return null;
 
+    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+
     let query = supabase.from("stores").select("*");
-    if (storeId) {
-        query = query.eq("id", storeId);
+    if (targetStoreId) {
+        query = query.eq("id", targetStoreId);
     } else {
         query = query.eq("owner_id", user.id).order("created_at", { ascending: true });
     }
@@ -119,8 +125,25 @@ export async function getStoreProfile(storeId?: string) {
 }
 
 // Backward compatibility
-export async function getProfile() {
-    return getStoreProfile();
+export async function getProfile(storeId?: string) {
+    return getStoreProfile(storeId);
+}
+
+export async function switchActiveStore(storeId: string) {
+    const cookieStore = await cookies();
+    cookieStore.set("active_store_id", storeId, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365, // 1 year
+        sameSite: "lax",
+    });
+
+    revalidatePath("/dashboard", "layout");
+    revalidatePath("/dashboard/store");
+    revalidatePath("/dashboard/catalog");
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard/bills");
+    revalidatePath("/dashboard/settings");
+    return { success: true };
 }
 
 export async function getStores() {
@@ -206,10 +229,17 @@ export async function createNewStore(data: {
         console.warn("Auto-branch creation warning:", locErr);
     }
 
+    // Automatically set this newly created store as active
+    cookieStore.set("active_store_id", newStore.id, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: "lax",
+    });
+
+    revalidatePath("/dashboard", "layout");
     revalidatePath("/dashboard/settings");
     revalidatePath("/dashboard/store");
     revalidatePath("/dashboard/catalog");
-    revalidatePath("/dashboard");
     return { success: true, store_id: newStore.id };
 }
 
@@ -230,8 +260,8 @@ export async function updateProfile(data: {
         return { error: "User session expired. Please sign in again." };
     }
 
-    // If store_id not provided, find the active/first store of this user
-    let targetStoreId = data.store_id;
+    // Target specific store or active cookie store
+    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
     if (!targetStoreId) {
         const { data: existingStore } = await supabase
             .from("stores")
@@ -279,10 +309,10 @@ export async function updateProfile(data: {
         return { error: error.message || "Failed to update store profile" };
     }
 
+    revalidatePath("/dashboard", "layout");
     revalidatePath("/dashboard/settings");
     revalidatePath("/dashboard/store");
     revalidatePath("/dashboard/catalog");
-    revalidatePath("/dashboard");
     return { success: true, store_id: targetStoreId };
 }
 
@@ -324,15 +354,22 @@ export async function updateETaxSettings(data: { etax_enabled: boolean; etax_api
 
     if (!user) return { error: "Unauthorized" };
 
-    const { error } = await supabase
-        .from("stores")
-        .update({
-            etax_enabled: data.etax_enabled,
-            etax_api_key: data.etax_api_key,
-            etax_company_id: data.etax_company_id,
-            updated_at: new Date().toISOString(),
-        })
-        .eq("owner_id", user.id);
+    const activeStoreId = cookieStore.get("active_store_id")?.value;
+
+    let query = supabase.from("stores").update({
+        etax_enabled: data.etax_enabled,
+        etax_api_key: data.etax_api_key,
+        etax_company_id: data.etax_company_id,
+        updated_at: new Date().toISOString(),
+    });
+
+    if (activeStoreId) {
+        query = query.eq("id", activeStoreId);
+    } else {
+        query = query.eq("owner_id", user.id);
+    }
+
+    const { error } = await query;
 
     if (error) {
         console.error("Error updating E-Tax settings:", error);
@@ -350,14 +387,21 @@ export async function updateStripeKeys(data: { stripe_publishable_key?: string; 
 
     if (!user) return { error: "Unauthorized" };
 
-    const { error } = await supabase
-        .from("stores")
-        .update({
-            stripe_publishable_key: data.stripe_publishable_key,
-            stripe_secret_key: data.stripe_secret_key,
-            updated_at: new Date().toISOString(),
-        })
-        .eq("owner_id", user.id);
+    const activeStoreId = cookieStore.get("active_store_id")?.value;
+
+    let query = supabase.from("stores").update({
+        stripe_publishable_key: data.stripe_publishable_key,
+        stripe_secret_key: data.stripe_secret_key,
+        updated_at: new Date().toISOString(),
+    });
+
+    if (activeStoreId) {
+        query = query.eq("id", activeStoreId);
+    } else {
+        query = query.eq("owner_id", user.id);
+    }
+
+    const { error } = await query;
 
     if (error) {
         console.error("Error updating Stripe keys:", error);
