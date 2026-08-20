@@ -181,8 +181,31 @@ export async function updateProfile(data: {
         return { error: error.message || "Failed to update profile" };
     }
 
+    // AUTO-CREATE / ENSURE PRIMARY HEADQUARTERS LOCATION for the new store
+    try {
+        const { data: existingLocations } = await supabase
+            .from("locations")
+            .select("id")
+            .eq("user_id", user.id);
+
+        if (!existingLocations || existingLocations.length === 0) {
+            const branchName = data.store_name ? `${data.store_name} (สาขาหลัก)` : "สาขาหลัก (Headquarters)";
+            await supabase.from("locations").insert({
+                user_id: user.id,
+                name: branchName,
+                code: "HQ-01",
+                type: "warehouse",
+                country: "TH",
+                address: data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก",
+            });
+        }
+    } catch (locErr) {
+        console.warn("Auto-location creation warning:", locErr);
+    }
+
     revalidatePath("/dashboard/settings");
     revalidatePath("/dashboard/store");
+    revalidatePath("/dashboard/catalog");
     revalidatePath("/dashboard");
     return { success: true };
 }
