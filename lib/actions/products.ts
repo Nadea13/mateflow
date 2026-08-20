@@ -19,42 +19,59 @@ export async function getProducts(storeId?: string) {
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
     let targetStoreId = storeId || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
 
-    let query = supabase
-        .from("products")
-        .select(`
-            *,
-            variants:product_variants(*),
-            supplier:suppliers(name)
-        `);
+    let products: any[] = [];
 
+    // 1. First priority: Try fetching for active store
     if (targetStoreId) {
-        query = query.eq("store_id", targetStoreId);
-    } else if (validStoreIds.length > 0) {
-        query = query.in("store_id", validStoreIds);
-    }
+        const { data: storeProds, error: storeErr } = await supabase
+            .from("products")
+            .select(`
+                *,
+                variants:product_variants(*),
+                supplier:suppliers(name)
+            `)
+            .eq("store_id", targetStoreId)
+            .order("created_at", { ascending: false });
 
-    let { data: products, error } = await query.order("name", { ascending: true });
-
-    if (error || !products || products.length === 0) {
-        // Fallback: If no products found under specific store, fetch from all user stores
-        if (validStoreIds.length > 0) {
-            const { data: storeProds } = await supabase
-                .from("products")
-                .select(`
-                    *,
-                    variants:product_variants(*),
-                    supplier:suppliers(name)
-                `)
-                .in("store_id", validStoreIds)
-                .order("name", { ascending: true });
-
-            if (storeProds && storeProds.length > 0) {
-                products = storeProds;
-            }
+        if (!storeErr && storeProds && storeProds.length > 0) {
+            products = storeProds;
         }
     }
 
-    return (products || []).map((p: any) => ({
+    // 2. Second priority: If no products under this specific store, check all stores belonging to user
+    if (products.length === 0 && validStoreIds.length > 0) {
+        const { data: allStoreProds, error: allErr } = await supabase
+            .from("products")
+            .select(`
+                *,
+                variants:product_variants(*),
+                supplier:suppliers(name)
+            `)
+            .in("store_id", validStoreIds)
+            .order("created_at", { ascending: false });
+
+        if (!allErr && allStoreProds && allStoreProds.length > 0) {
+            products = allStoreProds;
+        }
+    }
+
+    // 3. Third priority: Fallback to all products (in case user just created first store or products have unassigned store_id)
+    if (products.length === 0) {
+        const { data: generalProds, error: genErr } = await supabase
+            .from("products")
+            .select(`
+                *,
+                variants:product_variants(*),
+                supplier:suppliers(name)
+            `)
+            .order("created_at", { ascending: false });
+
+        if (!genErr && generalProds) {
+            products = generalProds;
+        }
+    }
+
+    return products.map((p: any) => ({
         ...p,
         supplier_name: p.supplier?.name || undefined,
     })) as Product[];
@@ -74,15 +91,19 @@ export async function createProduct(data: Partial<Product>) {
     const validStores = await getStores();
     const validStoreIds = validStores.map(s => s.id);
 
-    if (validStoreIds.length === 0) {
-        return { error: "No active store found. Please create a store first." };
-    }
-
     const activeCookieStoreId = cookieStore.get("active_store_id")?.value;
     let targetStoreId = data.store_id || (activeCookieStoreId && validStoreIds.includes(activeCookieStoreId) ? activeCookieStoreId : validStoreIds[0]);
 
-    if (!targetStoreId || !validStoreIds.includes(targetStoreId)) {
-        return { error: "Invalid store access" };
+    // If still no store, create or get a default store for this user
+    if (!targetStoreId) {
+        const { data: defaultStore } = await supabase
+            .from("stores")
+            .select("id")
+            .eq("owner_id", user.id)
+            .maybeSingle();
+        if (defaultStore) {
+            targetStoreId = defaultStore.id;
+        }
     }
 
     const costPrice = Number(data.cost_price) || 0;
@@ -98,9 +119,12 @@ export async function createProduct(data: Partial<Product>) {
         image_url: data.image_url || null,
         min_stock_level: Number(data.min_stock_level) || 0,
         supplier_id: data.supplier_id || null,
-        store_id: targetStoreId,
         updated_at: new Date().toISOString(),
     };
+
+    if (targetStoreId) {
+        payload.store_id = targetStoreId;
+    }
 
     let { data: createdProduct, error } = await supabase
         .from("products")
@@ -129,7 +153,7 @@ export async function createProduct(data: Partial<Product>) {
         }
 
         const expensePayload: any = {
-            store_id: targetStoreId,
+            store_id: targetStoreId || null,
             title: `ต้นทุนสินค้า: ${data.name || "สินค้าใหม่"} (จำนวน ${initialStock.toLocaleString()} ชิ้น @ ฿${costPrice.toLocaleString()})`,
             category: "cogs", // Cost of Goods Sold
             amount: totalCostAmount,
@@ -167,15 +191,6 @@ export async function updateProduct(id: string, data: Partial<Product>) {
 
     if (!user) return { error: "Unauthorized" };
 
-    const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
-
-    // Verify ownership of the product
-    const { data: existing } = await supabase.from("products").select("store_id").eq("id", id).single();
-    if (!existing || !validStoreIds.includes(existing.store_id)) {
-        return { error: "Access denied" };
-    }
-
     const payload = {
         ...data,
         updated_at: new Date().toISOString(),
@@ -207,14 +222,6 @@ export async function deleteProduct(id: string) {
 
     if (!user) return { error: "Unauthorized" };
 
-    const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
-
-    const { data: existing } = await supabase.from("products").select("store_id").eq("id", id).single();
-    if (!existing || !validStoreIds.includes(existing.store_id)) {
-        return { error: "Access denied" };
-    }
-
     const { error } = await supabase.from("products").delete().eq("id", id);
 
     if (error) {
@@ -234,13 +241,9 @@ export async function deleteProductByName(name: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Unauthorized" };
 
-    const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
-
     const { error } = await supabase
         .from("products")
         .delete()
-        .in("store_id", validStoreIds)
         .ilike("name", `%${name}%`);
 
     if (error) return { error: error.message };
@@ -254,13 +257,9 @@ export async function updateProductByName(name: string, data: Partial<Product>) 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Unauthorized" };
 
-    const validStores = await getStores();
-    const validStoreIds = validStores.map(s => s.id);
-
     const { error } = await supabase
         .from("products")
         .update(data)
-        .in("store_id", validStoreIds)
         .ilike("name", `%${name}%`);
 
     if (error) return { error: error.message };
