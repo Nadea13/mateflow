@@ -28,7 +28,8 @@ export interface ProductVariant {
 
 export interface Product {
     id: string
-    user_id: string
+    store_id?: string
+    user_id?: string
     name: string
     sku?: string
     barcode?: string
@@ -47,7 +48,8 @@ export interface Product {
 
 export interface Customer {
     id: string
-    user_id: string
+    store_id?: string
+    user_id?: string
     name: string
     email?: string
     phone?: string
@@ -80,7 +82,8 @@ export interface BillAdjustment {
 
 export interface Bill {
     id: string
-    user_id: string
+    store_id?: string
+    user_id?: string
     customer_id: string
     total_amount: number
     currency?: string
@@ -117,7 +120,8 @@ export interface Store extends Profile {
 
 export interface Expense {
     id: string
-    user_id: string
+    store_id?: string
+    user_id?: string
     title: string
     amount: number
     currency?: string
@@ -135,7 +139,8 @@ export interface Expense {
 
 export interface Supplier {
     id: string
-    user_id: string
+    store_id?: string
+    user_id?: string
     name: string
     email?: string
     phone?: string
@@ -158,7 +163,8 @@ export interface POItem {
 
 export interface PurchaseOrder {
     id: string
-    user_id: string
+    store_id?: string
+    user_id?: string
     supplier_id: string
     po_number: string
     total_amount: number
@@ -191,6 +197,7 @@ export type Location = Branch;
 
 export interface InventoryLevel {
     id: string
+    store_id?: string
     product_id: string
     location_id: string
     variant_id?: string

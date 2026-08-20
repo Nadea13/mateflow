@@ -1,22 +1,33 @@
-"use server";
+﻿"use server";
 
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Expense } from "@/types";
 
-export async function getExpenses() {
+export async function getExpenses(storeId?: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
 
-    const { data: expenses, error } = await supabase
-        .from("expenses")
-        .select("*")
-        .order("date", { ascending: false });
+    if (!user) return [];
 
-    if (error) {
-        console.error("Error fetching expenses:", error);
-        return [];
+    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+
+    let query = supabase.from("expenses").select("*").order("date", { ascending: false });
+
+    if (targetStoreId) {
+        query = query.eq("store_id", targetStoreId);
+    }
+
+    let { data: expenses, error } = await query;
+
+    if (error || !expenses) {
+        const fallback = await supabase
+            .from("expenses")
+            .select("*")
+            .order("date", { ascending: false });
+        expenses = fallback.data || [];
     }
 
     return expenses;
@@ -34,6 +45,7 @@ export async function createExpense(data: {
     wht_rate?: number;
     wht_amount?: number;
     input_vat?: number;
+    store_id?: string;
 }) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
@@ -43,12 +55,32 @@ export async function createExpense(data: {
         return { error: "Unauthorized" };
     }
 
-    const { error } = await supabase
+    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
+    if (!targetStoreId) {
+        const { data: defaultStore } = await supabase
+            .from("stores")
+            .select("id")
+            .eq("owner_id", user.id)
+            .order("created_at", { ascending: true })
+            .maybeSingle();
+        if (defaultStore) targetStoreId = defaultStore.id;
+    }
+
+    const payload: any = {
+        store_id: targetStoreId || user.id,
+        ...data,
+    };
+
+    let { error } = await supabase
         .from("expenses")
-        .insert({
-            user_id: user.id,
-            ...data,
-        });
+        .insert(payload);
+
+    if (error && (error.code === "PGRST204" || error.message?.includes("store_id"))) {
+        delete payload.store_id;
+        payload.user_id = user.id;
+        const fallbackRes = await supabase.from("expenses").insert(payload);
+        error = fallbackRes.error;
+    }
 
     if (error) {
         console.error("Error creating expense:", error);
@@ -57,6 +89,30 @@ export async function createExpense(data: {
 
     revalidatePath("/dashboard/expenses", "page");
     return { success: true };
+}
+
+export async function uploadReceipt(formData: FormData) {
+    const file = formData.get("receipt") as File;
+    if (!file) return { error: "No file provided" };
+
+    try {
+        const uploadFormData = new FormData();
+        uploadFormData.append("file", file);
+        uploadFormData.append("folder", "receipts");
+
+        const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/upload`, {
+            method: "POST",
+            body: uploadFormData,
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            return { success: true, receipt_url: data.url };
+        }
+        return { error: data.error || "Upload failed" };
+    } catch (err: any) {
+        return { error: err.message || "Failed to upload receipt" };
+    }
 }
 
 export async function deleteExpense(id: string) {
@@ -75,34 +131,4 @@ export async function deleteExpense(id: string) {
 
     revalidatePath("/dashboard/expenses", "page");
     return { success: true };
-}
-
-export async function uploadReceipt(formData: FormData) {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) return { error: "Unauthorized" };
-
-    const file = formData.get("receipt") as File;
-    if (!file) return { error: "No file provided" };
-
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const filePath = `${user.id}/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-        .from("receipts")
-        .upload(filePath, file);
-
-    if (uploadError) {
-        console.error("Error uploading receipt:", uploadError);
-        return { error: "Failed to upload receipt" };
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-        .from("receipts")
-        .getPublicUrl(filePath);
-
-    return { success: true, receipt_url: publicUrl };
 }

@@ -1,28 +1,39 @@
-"use server";
+﻿"use server";
 
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Bill, BillItem } from "@/types";
 
-export async function getBills() {
+export async function getBills(storeId?: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
 
-    const { data: bills, error } = await supabase
-        .from("bills")
-        .select(`
-            *,
-            customers ( name )
-        `)
-        .order("created_at", { ascending: false });
+    if (!user) return [];
 
-    if (error) {
-        console.error("Error fetching bills:", error);
-        return [];
+    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+
+    let query = supabase.from("bills").select(`
+        *,
+        customers ( name )
+    `).order("created_at", { ascending: false });
+
+    if (targetStoreId) {
+        query = query.eq("store_id", targetStoreId);
     }
 
-    return bills.map((bill: any) => ({
+    let { data: bills, error } = await query;
+
+    if (error || !bills) {
+        const fallback = await supabase
+            .from("bills")
+            .select(`*, customers ( name )`)
+            .order("created_at", { ascending: false });
+        bills = fallback.data || [];
+    }
+
+    return (bills || []).map((bill: any) => ({
         ...bill,
         customer_name: bill.customers?.name || "Unknown",
     }));
@@ -68,31 +79,41 @@ export async function getBill(id: string) {
     };
 }
 
-interface CreateBillInput {
-    customer_id: string;
-    note?: string;
+export async function createBill(data: {
+    customer_id?: string;
     items: {
         product_id: string;
         product_name: string;
         quantity: number;
         unit_price: number;
     }[];
-    adjustments?: {
-        label: string;
-        type: 'percent' | 'fixed';
-        value: number;
-    }[];
+    note?: string;
+    adjustments?: { label: string; type: "percent" | "fixed"; value: number }[];
     payment_terms?: number;
     validity_days?: number;
-}
-
-export async function createBill(data: CreateBillInput) {
+    store_id?: string;
+}) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
         return { error: "Unauthorized" };
+    }
+
+    let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
+    if (!targetStoreId) {
+        const { data: defaultStore } = await supabase
+            .from("stores")
+            .select("id")
+            .eq("owner_id", user.id)
+            .order("created_at", { ascending: true })
+            .maybeSingle();
+        if (defaultStore) targetStoreId = defaultStore.id;
+    }
+
+    if (!data.items || data.items.length === 0) {
+        return { error: "At least one item is required" };
     }
 
     // Calculate subtotal
@@ -113,23 +134,33 @@ export async function createBill(data: CreateBillInput) {
     }
     total_amount = Math.max(0, Math.round(total_amount * 100) / 100);
 
-    // 1. Create bill
-    const { data: bill, error: billError } = await supabase
+    // 1. Create bill with store_id (or fallback user_id)
+    const billPayload: any = {
+        store_id: targetStoreId || user.id,
+        customer_id: data.customer_id,
+        total_amount,
+        note: data.note || null,
+        status: "draft",
+        adjustments: data.adjustments || [],
+        payment_terms: data.payment_terms || 0,
+        validity_days: data.validity_days || 7,
+    };
+
+    let { data: bill, error: billError } = await supabase
         .from("bills")
-        .insert({
-            user_id: user.id,
-            customer_id: data.customer_id,
-            total_amount,
-            note: data.note || null,
-            status: "draft",
-            adjustments: data.adjustments || [],
-            payment_terms: data.payment_terms || 0,
-            validity_days: data.validity_days || 7,
-        })
+        .insert(billPayload)
         .select()
         .single();
 
-    if (billError) {
+    if (billError && (billError.code === "PGRST204" || billError.message?.includes("store_id"))) {
+        delete billPayload.store_id;
+        billPayload.user_id = user.id;
+        const retryRes = await supabase.from("bills").insert(billPayload).select().single();
+        bill = retryRes.data;
+        billError = retryRes.error;
+    }
+
+    if (billError || !bill) {
         console.error("Error creating bill:", billError);
         return { error: "Failed to create bill" };
     }
@@ -150,12 +181,10 @@ export async function createBill(data: CreateBillInput) {
 
     if (itemsError) {
         console.error("Error creating bill items:", itemsError);
-        // Rollback bill
-        await supabase.from("bills").delete().eq("id", bill.id);
         return { error: "Failed to create bill items" };
     }
 
-    // 3. Deduct stock for each item
+    // 3. Deduct stock for each product
     for (const item of data.items) {
         const { data: product } = await supabase
             .from("products")
@@ -173,11 +202,11 @@ export async function createBill(data: CreateBillInput) {
     }
 
     revalidatePath("/dashboard/bills");
-    revalidatePath("/dashboard/products");
-    return { success: true, bill };
+    revalidatePath("/dashboard/catalog");
+    return { success: true, billId: bill.id };
 }
 
-export async function updateBillStatus(id: string, status: string) {
+export async function updateBillStatus(id: string, status: "draft" | "paid" | "cancelled") {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
@@ -188,7 +217,7 @@ export async function updateBillStatus(id: string, status: string) {
 
     if (error) {
         console.error("Error updating bill status:", error);
-        return { error: "Failed to update bill status" };
+        return { error: "Failed to update status" };
     }
 
     revalidatePath("/dashboard/bills");
