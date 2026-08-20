@@ -238,20 +238,9 @@ export async function createNewStore(data: {
 
     if (branchRes.error) {
         console.warn("Retrying branch insertion into branchs with user_id/store_id fallback:", branchRes.error);
-        // Fallback: try inserting with user_id if table still has user_id
         await supabase.from("branchs").insert({
             ...branchPayload,
             user_id: user.id,
-        });
-
-        // Fallback: try inserting into locations table if branchs was not yet migrated
-        await supabase.from("locations").insert({
-            user_id: user.id,
-            name: finalBranchName,
-            code: finalBranchCode,
-            type: finalBranchType,
-            country: "TH",
-            address: finalBranchAddress,
         });
     }
 
@@ -287,7 +276,6 @@ export async function updateProfile(data: {
         return { error: "User session expired. Please sign in again." };
     }
 
-    // Target specific store or active cookie store
     let targetStoreId = data.store_id || cookieStore.get("active_store_id")?.value;
     if (!targetStoreId) {
         const { data: existingStore } = await supabase
@@ -302,7 +290,6 @@ export async function updateProfile(data: {
         }
     }
 
-    // If no store exists yet, create one
     if (!targetStoreId) {
         return createNewStore({
             store_name: data.store_name || "My Store",
@@ -314,7 +301,6 @@ export async function updateProfile(data: {
         });
     }
 
-    // Update existing store
     const updatePayload: any = {
         updated_at: new Date().toISOString(),
     };
@@ -343,24 +329,47 @@ export async function updateProfile(data: {
     return { success: true, store_id: targetStoreId };
 }
 
-export async function getTeamMembers() {
+export async function getTeamMembers(storeId?: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) return [];
 
-    const { data, error } = await supabase
-        .from("team_members")
-        .select("*")
+    const targetStoreId = storeId || cookieStore.get("active_store_id")?.value;
+
+    let query = supabase
+        .from("store_team_members")
+        .select(`
+            id,
+            role,
+            assigned_branch_id,
+            created_at,
+            user:users ( id, email, full_name, avatar_url )
+        `)
         .order("created_at", { ascending: false });
 
-    if (error) {
-        console.error("Error fetching team members:", error);
-        return [];
+    if (targetStoreId) {
+        query = query.eq("store_id", targetStoreId);
     }
 
-    return data || [];
+    const { data, error } = await query;
+
+    if (error || !data) {
+        // Fallback check legacy team_members
+        const fallback = await supabase.from("team_members").select("*");
+        return fallback.data || [];
+    }
+
+    return data.map((tm: any) => ({
+        id: tm.id,
+        role: tm.role,
+        assigned_branch_id: tm.assigned_branch_id,
+        email: tm.user?.email || "",
+        name: tm.user?.full_name || "",
+        avatar_url: tm.user?.avatar_url || "",
+        created_at: tm.created_at,
+    }));
 }
 
 export async function signOutUser() {
@@ -447,12 +456,12 @@ export async function deleteAccount() {
     if (!user) return { error: "Unauthorized" };
 
     // 1. Delete associated data
-    await supabase.from("bills").delete().eq("user_id", user.id);
-    await supabase.from("expenses").delete().eq("user_id", user.id);
-    await supabase.from("products").delete().eq("user_id", user.id);
-    await supabase.from("customers").delete().eq("user_id", user.id);
-    await supabase.from("suppliers").delete().eq("user_id", user.id);
-    await supabase.from("purchase_orders").delete().eq("user_id", user.id);
+    await supabase.from("bills").delete().eq("store_id", user.id);
+    await supabase.from("expenses").delete().eq("store_id", user.id);
+    await supabase.from("products").delete().eq("store_id", user.id);
+    await supabase.from("customers").delete().eq("store_id", user.id);
+    await supabase.from("suppliers").delete().eq("store_id", user.id);
+    await supabase.from("purchase_orders").delete().eq("store_id", user.id);
     await supabase.from("branchs").delete().eq("store_id", user.id);
 
     // 2. Delete Store and User record
