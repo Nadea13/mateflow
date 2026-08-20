@@ -33,11 +33,6 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        if (file.size > 10 * 1024 * 1024) {
-            toast.error("ขนาดไฟล์ต้องไม่เกิน 10MB");
-            return;
-        }
-
         const objectUrl = URL.createObjectURL(file);
         setAvatarUrl(objectUrl);
         setUploadingLogo(true);
@@ -58,7 +53,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
             }
 
             setAvatarUrl(data.url);
-            toast.success("อัปโหลดโลโก้ร้านค้าสำเร็จ!");
+            toast.success("อัปโหลดและแปลงเป็น AVIF บน Cloudflare เรียบร้อย!");
         } catch (err: any) {
             toast.error(err.message || "Failed to upload logo");
         } finally {
@@ -95,7 +90,6 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
             if (res?.success) {
                 toast.success("สร้างร้านค้าเรียบร้อยแล้ว!");
                 setOpen(false);
-                // Hard refresh/revalidate to immediately update layout & sidebar state
                 window.location.reload();
             } else {
                 toast.error(res?.error || "Failed to create store");
@@ -141,7 +135,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                 <input
                                     ref={logoInputRef}
                                     type="file"
-                                    accept="image/png, image/jpeg, image/webp, image/gif, image/svg+xml"
+                                    accept="image/*"
                                     onChange={handleLogoUpload}
                                     className="hidden"
                                     disabled={uploadingLogo}
@@ -180,7 +174,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                             {uploadingLogo ? "กำลังอัปโหลด..." : "โลโก้ร้านค้า"}
                                         </p>
                                         <p className="text-[9px] text-muted-foreground mt-0.5">
-                                            1:1 PNG, JPG
+                                            1:1 Auto AVIF
                                         </p>
                                     </div>
                                 )}
@@ -200,7 +194,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             />
                         </div>
 
-                        {/* เบอร์โทร และ เลขประจำตัวผู้เสียภาษี (เอา Icon ออก) */}
+                        {/* เบอร์โทร และ เลขประจำตัวผู้เสียภาษี */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <Label htmlFor="store-phone" className="text-xs font-semibold">เบอร์โทรศัพท์</Label>
@@ -239,7 +233,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                             />
                         </div>
 
-                        {/* ลายเซ็นต์ผู้มีอำนาจ (เอา Icon ออก และเอาวงเล็บออก) */}
+                        {/* ลายเซ็นต์ผู้มีอำนาจ */}
                         <div className="space-y-1.5 border-t border-border/60 pt-3">
                             <Label className="text-xs font-semibold block mb-1">ลายเซ็นต์ผู้มีอำนาจ</Label>
                             <ImageUploadZone
@@ -250,7 +244,7 @@ export function CreateStoreDialog({ open, setOpen }: CreateStoreDialogProps) {
                                 className="w-full"
                             />
                             <p className="text-[10px] text-muted-foreground">
-                                แนะนำภาพลายเซ็นต์พื้นหลังโปร่งใส (PNG) สำหรับประทับลงในใบเสร็จและใบแจ้งหนี้อัตโนมัติ
+                                แปลงและจัดเก็บเป็นไฟล์ AVIF คุณภาพสูงโดยอัตโนมัติ
                             </p>
                         </div>
                     </div>
