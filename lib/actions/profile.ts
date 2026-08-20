@@ -14,7 +14,7 @@ export async function getUserProfile() {
 
     if (!user) return null;
 
-    // 1. Fetch user profile from public.users table (or stores/profiles fallback)
+    // 1. Fetch user profile from public.users table (or stores fallback)
     let { data: dbUser } = await supabase
         .from("users")
         .select("*")
@@ -26,6 +26,7 @@ export async function getUserProfile() {
         .from("stores")
         .select("*")
         .eq("owner_id", user.id)
+        .order("created_at", { ascending: true })
         .maybeSingle();
 
     if (!store) {
@@ -75,18 +76,21 @@ export async function getAuthProfile() {
     };
 }
 
-export async function getStoreProfile() {
+export async function getStoreProfile(storeId?: string) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) return null;
 
-    let { data: store } = await supabase
-        .from("stores")
-        .select("*")
-        .eq("owner_id", user.id)
-        .maybeSingle();
+    let query = supabase.from("stores").select("*");
+    if (storeId) {
+        query = query.eq("id", storeId);
+    } else {
+        query = query.eq("owner_id", user.id).order("created_at", { ascending: true });
+    }
+
+    let { data: store } = await query.maybeSingle();
 
     if (!store) {
         // Fallback by id
@@ -119,6 +123,169 @@ export async function getProfile() {
     return getStoreProfile();
 }
 
+export async function getStores() {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return [];
+
+    const { data, error } = await supabase
+        .from("stores")
+        .select("*")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: true });
+
+    if (error || !data || data.length === 0) {
+        // Fallback check by id
+        const fallback = await supabase
+            .from("stores")
+            .select("*")
+            .eq("id", user.id);
+        return fallback.data || [];
+    }
+
+    return data;
+}
+
+export async function createNewStore(data: {
+    store_name: string;
+    store_phone?: string;
+    tax_id?: string;
+    store_address?: string;
+    avatar_url?: string;
+    signature_url?: string;
+}) {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        return { error: "User session expired. Please sign in again." };
+    }
+
+    // Always insert a BRAND NEW store row
+    const storePayload: any = {
+        owner_id: user.id,
+        store_name: data.store_name,
+        store_phone: data.store_phone || null,
+        tax_id: data.tax_id || null,
+        store_address: data.store_address || null,
+        avatar_url: data.avatar_url || null,
+        signature_url: data.signature_url || null,
+        role: "owner",
+        default_currency: "THB",
+        country: "TH",
+        tax_rate: 7,
+        updated_at: new Date().toISOString(),
+    };
+
+    const { data: newStore, error } = await supabase
+        .from("stores")
+        .insert(storePayload)
+        .select("id")
+        .single();
+
+    if (error) {
+        console.error("Create new store error:", error);
+        return { error: error.message || "Failed to create new store" };
+    }
+
+    // Auto-create HQ branch for this brand new store
+    try {
+        const branchName = `${data.store_name} (สาขาหลัก)`;
+        await supabase.from("branchs").insert({
+            store_id: newStore.id,
+            name: branchName,
+            code: "HQ-01",
+            type: "warehouse",
+            country: "TH",
+            address: data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก",
+        });
+    } catch (locErr) {
+        console.warn("Auto-branch creation warning:", locErr);
+    }
+
+    revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard/store");
+    revalidatePath("/dashboard/catalog");
+    revalidatePath("/dashboard");
+    return { success: true, store_id: newStore.id };
+}
+
+export async function updateProfile(data: { 
+    store_id?: string;
+    store_name?: string; 
+    store_address?: string; 
+    tax_id?: string; 
+    store_phone?: string;
+    avatar_url?: string;
+    signature_url?: string;
+}) {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        return { error: "User session expired. Please sign in again." };
+    }
+
+    // If store_id not provided, find the active/first store of this user
+    let targetStoreId = data.store_id;
+    if (!targetStoreId) {
+        const { data: existingStore } = await supabase
+            .from("stores")
+            .select("id")
+            .eq("owner_id", user.id)
+            .order("created_at", { ascending: true })
+            .maybeSingle();
+
+        if (existingStore) {
+            targetStoreId = existingStore.id;
+        }
+    }
+
+    // If no store exists yet, create one
+    if (!targetStoreId) {
+        return createNewStore({
+            store_name: data.store_name || "My Store",
+            store_phone: data.store_phone,
+            tax_id: data.tax_id,
+            store_address: data.store_address,
+            avatar_url: data.avatar_url,
+            signature_url: data.signature_url,
+        });
+    }
+
+    // Update existing store
+    const updatePayload: any = {
+        updated_at: new Date().toISOString(),
+    };
+
+    if (data.store_name !== undefined) updatePayload.store_name = data.store_name;
+    if (data.store_address !== undefined) updatePayload.store_address = data.store_address;
+    if (data.tax_id !== undefined) updatePayload.tax_id = data.tax_id;
+    if (data.store_phone !== undefined) updatePayload.store_phone = data.store_phone;
+    if (data.avatar_url !== undefined) updatePayload.avatar_url = data.avatar_url;
+    if (data.signature_url !== undefined) updatePayload.signature_url = data.signature_url;
+
+    const { error } = await supabase
+        .from("stores")
+        .update(updatePayload)
+        .eq("id", targetStoreId);
+
+    if (error) {
+        console.error("Supabase updateStore error:", error);
+        return { error: error.message || "Failed to update store profile" };
+    }
+
+    revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard/store");
+    revalidatePath("/dashboard/catalog");
+    revalidatePath("/dashboard");
+    return { success: true, store_id: targetStoreId };
+}
+
 export async function getTeamMembers() {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
@@ -148,111 +315,6 @@ export async function signOutUser() {
 
 export async function softDeleteAccount() {
     return deleteAccount();
-}
-
-export async function updateProfile(data: { 
-    store_id?: string;
-    store_name?: string; 
-    store_address?: string; 
-    tax_id?: string; 
-    store_phone?: string;
-    avatar_url?: string;
-    signature_url?: string;
-}) {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-        return { error: "User session expired. Please sign in again." };
-    }
-
-    // 1. Check existing store for this owner
-    let existingStoreId = data.store_id;
-    if (!existingStoreId) {
-        const { data: existingStore } = await supabase
-            .from("stores")
-            .select("id")
-            .eq("owner_id", user.id)
-            .maybeSingle();
-
-        if (existingStore) {
-            existingStoreId = existingStore.id;
-        }
-    }
-
-    // 2. Prepare Store Payload (with independent UUID and owner_id)
-    const storePayload: any = {
-        owner_id: user.id,
-        updated_at: new Date().toISOString(),
-    };
-
-    if (existingStoreId) {
-        storePayload.id = existingStoreId;
-    }
-
-    if (data.store_name !== undefined) storePayload.store_name = data.store_name;
-    if (data.store_address !== undefined) storePayload.store_address = data.store_address;
-    if (data.tax_id !== undefined) storePayload.tax_id = data.tax_id;
-    if (data.store_phone !== undefined) storePayload.store_phone = data.store_phone;
-    if (data.avatar_url !== undefined) storePayload.avatar_url = data.avatar_url;
-    if (data.signature_url !== undefined) storePayload.signature_url = data.signature_url;
-
-    // 3. Upsert to stores table
-    let { data: savedStore, error } = await supabase
-        .from("stores")
-        .upsert(storePayload)
-        .select("id")
-        .single();
-
-    // Fallback: If stores table schema has backward-compatible id=user.id
-    if (error) {
-        console.warn("Retrying store upsert with direct ID fallback:", error.message);
-        storePayload.id = user.id;
-        const retryResult = await supabase
-            .from("stores")
-            .upsert(storePayload, { onConflict: "id" })
-            .select("id")
-            .single();
-        error = retryResult.error;
-        savedStore = retryResult.data;
-    }
-
-    if (error) {
-        console.error("Supabase updateStore error:", error);
-        return { error: error.message || "Failed to update store profile" };
-    }
-
-    const currentStoreId = savedStore?.id || existingStoreId || user.id;
-
-    // 4. Auto-create / ensure primary headquarters branch for this store
-    try {
-        let { data: existingBranches } = await supabase
-            .from("branchs")
-            .select("id")
-            .eq("store_id", currentStoreId);
-
-        if (!existingBranches || existingBranches.length === 0) {
-            const branchName = data.store_name ? `${data.store_name} (สาขาหลัก)` : "สาขาหลัก (Headquarters)";
-            
-            await supabase.from("branchs").insert({
-                store_id: currentStoreId,
-                name: branchName,
-                code: "HQ-01",
-                type: "warehouse",
-                country: "TH",
-                address: data.store_address || "สำนักงานใหญ่ / คลังสินค้าหลัก",
-            });
-        }
-    } catch (locErr) {
-        console.warn("Auto-branch creation warning:", locErr);
-    }
-
-    revalidatePath("/dashboard/settings");
-    revalidatePath("/dashboard/store");
-    revalidatePath("/dashboard/catalog");
-    revalidatePath("/dashboard");
-    return { success: true, store_id: currentStoreId };
 }
 
 export async function updateETaxSettings(data: { etax_enabled: boolean; etax_api_key: string; etax_company_id: string }) {
