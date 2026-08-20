@@ -15,6 +15,7 @@ import { Product, Supplier } from "@/types";
 import { useEffect, useState, useTransition } from "react";
 import { createProduct, updateProduct } from "@/lib/actions/products";
 import { getSuppliers } from "@/lib/actions/suppliers";
+import { ImageUploadZone } from "@/components/ui/image-upload-zone";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { Barcode, DollarSign, Layers, Package, Tag } from "lucide-react";
@@ -84,8 +85,6 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
         }
     }, [productToEdit, open]);
 
-    const [isPending, startTransition] = useTransition();
-
     const generateSku = () => {
         if (!formData.name) return;
         const prefix = formData.name.trim().slice(0, 3).toUpperCase();
@@ -148,7 +147,7 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>{productToEdit ? "Edit Product" : "Add New Global Product"}</DialogTitle>
@@ -159,16 +158,28 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
+                        {/* Product Image Dropzone (Direct to Cloudflare R2 AVIF) */}
+                        <div className="flex flex-col items-center justify-center pb-2">
+                            <Label className="text-xs font-semibold mb-1.5 self-start">รูปภาพสินค้า</Label>
+                            <ImageUploadZone
+                                value={formData.image_url}
+                                onChange={(url) => setFormData({ ...formData, image_url: url })}
+                                folder="products"
+                                label="อัปโหลดรูปสินค้า"
+                                className="w-full"
+                            />
+                        </div>
+
                         {/* Name */}
                         <div className="grid grid-cols-4 items-center gap-3">
-                            <Label htmlFor="name" className="text-right font-medium">
+                            <Label htmlFor="name" className="text-right font-medium text-xs">
                                 Name *
                             </Label>
                             <Input
                                 id="name"
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                className="col-span-3"
+                                className="col-span-3 h-9 text-xs"
                                 required
                                 placeholder="e.g. Premium Cotton T-Shirt"
                             />
@@ -176,7 +187,7 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
 
                         {/* SKU */}
                         <div className="grid grid-cols-4 items-center gap-3">
-                            <Label htmlFor="sku" className="text-right font-medium">
+                            <Label htmlFor="sku" className="text-right font-medium text-xs">
                                 SKU
                             </Label>
                             <div className="col-span-3 flex gap-2">
@@ -185,14 +196,14 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
                                     value={formData.sku}
                                     onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                                     placeholder="TSH-001"
-                                    className="font-mono text-xs"
+                                    className="font-mono text-xs h-9"
                                 />
                                 <Button
                                     type="button"
                                     variant="outline"
                                     size="sm"
                                     onClick={generateSku}
-                                    className="text-xs shrink-0"
+                                    className="text-xs shrink-0 h-9"
                                 >
                                     Auto
                                 </Button>
@@ -201,21 +212,21 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
 
                         {/* Barcode */}
                         <div className="grid grid-cols-4 items-center gap-3">
-                            <Label htmlFor="barcode" className="text-right font-medium">
+                            <Label htmlFor="barcode" className="text-right font-medium text-xs">
                                 Barcode
                             </Label>
                             <Input
                                 id="barcode"
                                 value={formData.barcode}
                                 onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                                className="col-span-3 font-mono text-xs"
+                                className="col-span-3 font-mono text-xs h-9"
                                 placeholder="e.g. 8851234567890"
                             />
                         </div>
 
                         {/* Price & Cost Price */}
                         <div className="grid grid-cols-4 items-center gap-3">
-                            <Label htmlFor="price" className="text-right font-medium">
+                            <Label htmlFor="price" className="text-right font-medium text-xs">
                                 Retail Price *
                             </Label>
                             <Input
@@ -223,7 +234,7 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
                                 type="number"
                                 value={formData.price}
                                 onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                                className="col-span-3 font-mono text-xs"
+                                className="col-span-3 font-mono text-xs h-9"
                                 required
                                 min="0"
                                 step="0.01"
@@ -232,7 +243,7 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
                         </div>
 
                         <div className="grid grid-cols-4 items-center gap-3">
-                            <Label htmlFor="cost_price" className="text-right font-medium">
+                            <Label htmlFor="cost_price" className="text-right font-medium text-xs">
                                 Cost Price
                             </Label>
                             <Input
@@ -240,7 +251,7 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
                                 type="number"
                                 value={formData.cost_price}
                                 onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
-                                className="col-span-3 font-mono text-xs"
+                                className="col-span-3 font-mono text-xs h-9"
                                 min="0"
                                 step="0.01"
                                 placeholder="COGS / Cost of Goods Sold"
@@ -249,7 +260,7 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
 
                         {/* Stock & Alert Level */}
                         <div className="grid grid-cols-4 items-center gap-3">
-                            <Label htmlFor="stock" className="text-right font-medium">
+                            <Label htmlFor="stock" className="text-right font-medium text-xs">
                                 Initial Stock *
                             </Label>
                             <Input
@@ -257,14 +268,14 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
                                 type="number"
                                 value={formData.stock}
                                 onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                                className="col-span-3 font-mono text-xs"
+                                className="col-span-3 font-mono text-xs h-9"
                                 required
                                 min="0"
                             />
                         </div>
 
                         <div className="grid grid-cols-4 items-center gap-3">
-                            <Label htmlFor="min_stock_level" className="text-right font-medium">
+                            <Label htmlFor="min_stock_level" className="text-right font-medium text-xs">
                                 Low Stock Alert
                             </Label>
                             <Input
@@ -272,29 +283,15 @@ export function ProductForm({ open, setOpen, productToEdit, suppliers: initialSu
                                 type="number"
                                 value={formData.min_stock_level}
                                 onChange={(e) => setFormData({ ...formData, min_stock_level: e.target.value })}
-                                className="col-span-3 font-mono text-xs"
+                                className="col-span-3 font-mono text-xs h-9"
                                 min="0"
                                 placeholder="Threshold (e.g. 10)"
                             />
                         </div>
 
-                        {/* Image URL */}
-                        <div className="grid grid-cols-4 items-center gap-3">
-                            <Label htmlFor="image" className="text-right font-medium">
-                                Image URL
-                            </Label>
-                            <Input
-                                id="image"
-                                value={formData.image_url}
-                                onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                                className="col-span-3 text-xs"
-                                placeholder="https://..."
-                            />
-                        </div>
-
                         {/* Supplier */}
                         <div className="grid grid-cols-4 items-center gap-3">
-                            <Label htmlFor="supplier" className="text-right font-medium">
+                            <Label htmlFor="supplier" className="text-right font-medium text-xs">
                                 Supplier
                             </Label>
                             <select
